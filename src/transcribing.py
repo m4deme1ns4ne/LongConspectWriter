@@ -2,8 +2,9 @@ import time
 import os
 from faster_whisper import WhisperModel
 from loguru import logger
+from tqdm import tqdm
 
-from src.ai_configs import STTModelConfig, AIModelConfig
+from src.ai_configs import STTModelConfig
 
 
 class FasterWhisper:
@@ -11,10 +12,16 @@ class FasterWhisper:
 
     def __init__(self, config: STTModelConfig):
         self._config = config
-        logger.success(f"Инициализация агента STT (Модель: {self._config.model_size}, Устройство: {self._config.device})")
-    
-    def transcribing(self, audio_file_path: str, output_dir: str = "data/example-transcrib",
-                           language_audio: str | None = None) -> None:
+        logger.success(
+            f"Инициализация агента STT (Модель: {self._config.model_size}, Устройство: {self._config.device})"
+        )
+
+    def transcribing(
+        self,
+        audio_file_path: str,
+        output_dir: str = "data/example-transcrib",
+        language_audio: str | None = None,
+    ) -> None:
         """
         Транскрибирует аудиофайл в текст.
 
@@ -32,36 +39,77 @@ class FasterWhisper:
         os.makedirs(output_dir, exist_ok=True)
         logger.success(f"Директория {output_dir} найдена!")
 
-        logger.info("Загрузка модели в память...")
-        model = WhisperModel(self._config.model_size, device=self._config.device, compute_type=self._config.compute_type)
-        logger.success("Модель успешно загружена!")
+        logger.info(f"Загрузка {self._config.model_size} в память...")
+        model = WhisperModel(
+            self._config.model_size,
+            device=self._config.device,
+            compute_type=self._config.compute_type,
+        )
+        logger.success(f"Модель {self._config.model_size} успешно загружена!")
 
         timestamp = int(time.time())
-        pure_audio_file = os.path.basename(audio_file_path)
-        transcrib_file_name = f"{self._config.model_size}-{self._config.device}-{self._config.compute_type}-{pure_audio_file[:10]}-{timestamp}.txt"
+        pure_audio_file_name = os.path.basename(audio_file_path)
+        transcrib_file_name = f"{self._config.model_size}-{self._config.device}-{self._config.compute_type}-{pure_audio_file_name[:10]}-{timestamp}.txt"
         logger.info(f"Итоговое название файла: {transcrib_file_name}")
 
-        logger.info(f"Начинаем транскрибацию файла: {audio_file_path}...")
+        logger.info(f"Начинаем обработку аудиофайла файла: {audio_file_path}...")
         start_time = time.time()
 
         # Метод transcribe автоматически режет длинное аудио на правильные куски
         segments, info = model.transcribe(
             audio_file_path,
-            beam_size=5,          # Баланс между скоростью и качеством (5 - стандарт)
-            language=language_audio,        # Жестко задаем язык, чтобы модель не тратила время на определение
-            vad_filter=True,      # Включаем детектор голоса (игнорирует тишину)
-            vad_parameters=dict(min_silence_duration_ms=500) # Настройка чувствительности тишины
+            beam_size=5,  # Баланс между скоростью и качеством (5 - стандарт)
+            language=language_audio,  # Жестко задаем язык, чтобы модель не тратила время на определение
+            vad_filter=True,  # Включаем детектор голоса (игнорирует тишину)
+            vad_parameters=dict(
+                min_silence_duration_ms=500
+            ),  # Настройка чувствительности тишины
         )
 
-        logger.info(f"Определен язык: {info.language} с вероятностью {info.language_probability:.2f}")
+        logger.info(
+            f"Определен язык: {info.language} с вероятностью {info.language_probability:.2f}"
+        )
+
+        # Срез [:3] возьмет только топ-3 самых вероятных языков (список уже отсортирован по убыванию)
+        top_3_langs = [
+            (lang, round(prob, 2)) for lang, prob in info.all_language_probs[:3]
+        ]
+        logger.info(f"Топ-3 альтернативных языков: {top_3_langs}")
+
+        # Оставляем параметры для дебага
+        logger.info(f"Параметры транскрибации: {info.transcription_options}")
+
+        # Считаем сэкономленное время
+        duration_mins = info.duration / 60
+        logger.info(f"Исходная длительность аудио: {duration_mins:.2f} мин.")
+
+        # faster-whisper отдает duration_after_vad только если включен vad_filter=True
+        if info.duration_after_vad is not None:
+            vad_mins = info.duration_after_vad / 60
+            saved_mins = duration_mins - vad_mins
+            logger.info(
+                f"Длительность полезного сигнала (без тишины): {vad_mins:.2f} мин."
+            )
+            logger.success(f"VAD-фильтр вырезал {saved_mins:.2f} мин. тишины!")
 
         with open(f"{output_dir}/{transcrib_file_name}", "x", encoding="utf-8") as file:
-            for segment in segments:
-                text = segment.text
-                file.write(f"{text}\n")
-                file.flush()
-                logger.warning(f"Записан новый сегмент: {text[:10] + '...' if len(text) > 10 else text}")
+            with tqdm(
+                total=round(info.duration, 2),
+                unit=" аудио-сек",
+                desc="Транскрибация",
+                colour="green",
+            ) as pbar:
+                for segment in segments:
+                    text = segment.text
+                    file.write(f"{text}\n")
 
+                    file.flush()
+                    os.fsync(file.fileno())
+
+                    progress = segment.end - pbar.n
+                    pbar.update(progress)
 
         end_time = time.time()
-        logger.success(f"Транскрибация завершена за {end_time - start_time:.2f} секунд.")
+        logger.success(
+            f"Транскрибация завершена за {end_time - start_time:.2f} секунд."
+        )
