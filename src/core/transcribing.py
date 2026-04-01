@@ -15,13 +15,20 @@ class FasterWhisper:
         logger.success(
             f"Инициализация агента STT (Модель: {self._config.model_size}, Устройство: {self._config.device})"
         )
+        logger.info(f"Загрузка {self._config.model_size} в память...")
+        self.model = WhisperModel(
+            self._config.model_size,
+            device=self._config.device,
+            compute_type=self._config.compute_type,
+        )
+        logger.success(f"Модель {self._config.model_size} успешно загружена!")
 
     def transcribing(
         self,
         audio_file_path: str,
         output_dir: str = "data/example-transcrib",
         language_audio: str | None = None,
-    ) -> None:
+    ) -> str:
         """
         Транскрибирует аудиофайл в текст.
 
@@ -39,14 +46,6 @@ class FasterWhisper:
         os.makedirs(output_dir, exist_ok=True)
         logger.success(f"Директория {output_dir} найдена!")
 
-        logger.info(f"Загрузка {self._config.model_size} в память...")
-        model = WhisperModel(
-            self._config.model_size,
-            device=self._config.device,
-            compute_type=self._config.compute_type,
-        )
-        logger.success(f"Модель {self._config.model_size} успешно загружена!")
-
         timestamp = int(time.time())
         pure_audio_file_name = os.path.basename(audio_file_path)
         transcrib_file_name = f"{self._config.model_size}-{self._config.device}-{self._config.compute_type}-{pure_audio_file_name[:10]}-{timestamp}.txt"
@@ -56,7 +55,7 @@ class FasterWhisper:
         start_time = time.time()
 
         # Метод transcribe автоматически режет длинное аудио на правильные куски
-        segments, info = model.transcribe(
+        segments, info = self.model.transcribe(
             audio_file_path,
             beam_size=5,  # Баланс между скоростью и качеством (5 - стандарт)
             language=language_audio,  # Жестко задаем язык, чтобы модель не тратила время на определение
@@ -92,7 +91,9 @@ class FasterWhisper:
             )
             logger.success(f"VAD-фильтр вырезал {saved_mins:.2f} мин. тишины!")
 
-        with open(f"{output_dir}/{transcrib_file_name}", "x", encoding="utf-8") as file:
+        final_path = f"{output_dir}/{transcrib_file_name}"
+
+        with open(final_path, "x", encoding="utf-8") as file:
             with tqdm(
                 total=round(info.duration, 2),
                 unit=" аудио-сек",
@@ -113,3 +114,5 @@ class FasterWhisper:
         logger.success(
             f"Транскрибация завершена за {end_time - start_time:.2f} секунд."
         )
+
+        return final_path
