@@ -5,51 +5,55 @@ import time
 from tqdm import tqdm
 import os
 from src.ai_configs import (
-    LLMModelConfig,
     LoadPrompts,
     TextsSplitter,
-    VRamUsage,
-    TqdmTokenStreamer
+    TqdmTokenStreamer,
+    InitConfig,
+    GenConfig,
+    LLMAgent,
 )
 import torch
+from dataclasses import asdict
 
 
-class AgentDrafter:
-    def __init__(self, config: LLMModelConfig):
+class AgentDrafter(LLMAgent):
+    def __init__(self, init_config: InitConfig, gen_config: GenConfig):
         """
         Сейчас ваш класс AgentDrafter загружает модель и
         токенайзер в память каждый раз при вызове метода generate.
         Это занимает время и память. В идеале их стоит загружать один
         раз в __init__, чтобы генерировать ответы мгновенно при последующих вызовах.
         """
-
-        self._config = config
+        self._init_config = init_config
+        self._gen_config = gen_config
         logger.success(
-            f"Инициализация агента Drafter (Модель: {self._config.model}, Устройство: {self._config.device_map})"
+            f"Инициализация агента Drafter (Модель: {self._init_config.model}, Устройство: {self._init_config.device_map})"
         )
 
         quant_config = BitsAndBytesConfig(
             load_in_4bit=True,
-            bnb_4bit_compute_dtype=self._config.torch_dtype,
+            bnb_4bit_compute_dtype=self._init_config.torch_dtype,
             bnb_4bit_quant_type="nf4",
             bnb_4bit_use_double_quant=True,
         )
 
-        logger.info(f"Загрузка {self._config.model} в память...")
+        logger.info(f"Загрузка {self._init_config.model} в память...")
         self.model = AutoModelForCausalLM.from_pretrained(
-            self._config.model,
-            torch_dtype=self._config.torch_dtype,
-            device_map=self._config.device_map,
+            self._init_config.model,
+            torch_dtype=self._init_config.torch_dtype,
+            device_map=self._init_config.device_map,
             quantization_config=quant_config,
             attn_implementation="sdpa",
         )
-        logger.success(f"Модель {self._config.model} загружена!")
+        logger.success(f"Модель {self._init_config.model} загружена!")
 
-        logger.info(f"Загрузка токинайзера для {self._config.model} в память...")
-        self.tokenizer = AutoTokenizer.from_pretrained(self._config.model)
-        logger.success(f"Загрузка токинайзера для {self._config.model} заверщена!")
+        logger.info(f"Загрузка токинайзера для {self._init_config.model} в память...")
+        self.tokenizer = AutoTokenizer.from_pretrained(self._init_config.model)
+        logger.success(f"Загрузка токинайзера для {self._init_config.model} заверщена!")
 
-    def _generate(self, user_prompt: str, system_prompt: str = None, streamer: BaseStreamer = None) -> str:
+    def _generate(
+        self, user_prompt: str, system_prompt: str = None, streamer: BaseStreamer = None
+    ) -> str:
         messages = [
             {
                 "role": "system",
@@ -64,7 +68,7 @@ class AgentDrafter:
 
         with torch.no_grad():
             output = self.model.generate(
-                max_new_tokens=self._config.max_new_tokens, streamer=streamer, **model_inputs
+                **model_inputs, **asdict(self._gen_config), streamer=streamer
             )
         output = [
             output_ids[len(input_ids) :]
@@ -75,7 +79,7 @@ class AgentDrafter:
 
         return response
 
-    def draft(self, path_transcrib: str):
+    def run(self, path_transcrib: str):
         pure_transcrib_file_name = os.path.basename(path_transcrib)
 
         with open(path_transcrib, "r", encoding="utf-8") as file:
@@ -84,7 +88,7 @@ class AgentDrafter:
 
         # 2. Нарезка на чанки
         transcrib_chunks = TextsSplitter.split_text(
-            text=transcrib, model_name=self._config.model
+            text=transcrib, model_name=self._init_config.model
         )
 
         # 3. Подготовка промптов и инициализация
@@ -100,7 +104,7 @@ class AgentDrafter:
             unit="чанк",
             desc="Конспекты",
             colour="green",
-            position=0
+            position=0,
         ) as pbar:
             for chunk in transcrib_chunks:
 
@@ -109,17 +113,19 @@ class AgentDrafter:
                 )
 
                 with tqdm(
-                    total=self._config.max_new_tokens, 
-                    desc="Генерация токенов", 
+                    total=self._gen_config.max_new_tokens,
+                    desc="Генерация токенов",
                     unit="токен",
-                    colour="blue", 
-                    leave=False, # Убираем бар после завершения чанка
-                    position=1   # Рисуем под основным баром
+                    colour="blue",
+                    leave=False,  # Убираем бар после завершения чанка
+                    position=1,  # Рисуем под основным баром
                 ) as token_pbar:
 
                     streamer = TqdmTokenStreamer(token_pbar)
                     response = self._generate(
-                        system_prompt=system_prompt, user_prompt=user_prompt, streamer=streamer
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                        streamer=streamer,
                     )
 
                 final_drafts.append(response)
@@ -128,7 +134,7 @@ class AgentDrafter:
 
         monolith_draft = "\n\n---\n\n".join(final_drafts)
 
-        safe_model_name = self._config.model.replace("/", "_")
+        safe_model_name = self._init_config.model.replace("/", "-")
 
         timestamp = int(time.time())
         out_filepath = os.path.join(

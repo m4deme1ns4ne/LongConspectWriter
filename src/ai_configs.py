@@ -8,6 +8,7 @@ import functools
 import time
 import gc
 from transformers.generation.streamers import BaseStreamer
+from abc import ABC, abstractmethod
 
 
 @dataclass
@@ -19,16 +20,18 @@ class AIModelConfig:
 
 @dataclass
 class LLMModelConfig(AIModelConfig):
-    """Класс конфига для всех LLM моделей"""
+    """Конфиг для всех LLM моделей"""
+
+    pass
+
+
+@dataclass
+class InitConfig(LLMModelConfig):
+    """Конфиг только для загрузки весов в память"""
 
     model: str
     torch_dtype: str | None = None
     device_map: str | None = None
-    max_new_tokens: int = 500
-    repetition_penalty: float = 1.15
-    temperature: float = 0.1
-    top_p: float = 0.9
-    do_sample: bool = True
 
     def __post_init__(self) -> None:
         if self.device_map is None:
@@ -38,6 +41,17 @@ class LLMModelConfig(AIModelConfig):
             self.torch_dtype = (
                 torch.bfloat16 if torch.cuda.is_available() else torch.float32
             )
+
+
+@dataclass
+class GenConfig(LLMModelConfig):
+    """Конфиг только для параметров генерации (kwargs)"""
+
+    max_new_tokens: int = 500
+    repetition_penalty: float = 1.15
+    temperature: float = 0.1
+    top_p: float = 0.9
+    do_sample: bool = True
 
 
 @dataclass
@@ -54,6 +68,31 @@ class STTModelConfig(AIModelConfig):
 
         if self.compute_type is None:
             self.compute_type = "float16" if self.device == "cuda" else "int8"
+
+
+class Agent(ABC):
+    @abstractmethod
+    def run(self):
+        pass
+
+
+class LLMAgent(Agent):
+    @abstractmethod
+    def _generate(self):
+        pass
+
+    def __enter__(self):
+        return self
+        
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        logger.info(f"Очистка памяти агента {self.__class__.__name__}...")
+        if hasattr(self, 'model'):
+            del self.model
+        if hasattr(self, 'tokenizer'):
+            del self.tokenizer
+
+class STTAgent(Agent):
+    pass
 
 
 class TextsSplitter:
@@ -143,7 +182,7 @@ def decorator_v_ram_cleaner(func):
             return result
         finally:
             _VRamCleaner.empty_vram(caller_name=name)
-            
+
     return wrapper
 
 
@@ -153,15 +192,12 @@ class TqdmTokenStreamer(BaseStreamer):
         self.is_first = True
 
     def put(self, value):
-        # При первом вызове put() модель передает весь входящий промпт.
-        # Нам не нужно добавлять его в прогресс-бар, поэтому пропускаем.
         if self.is_first:
             self.is_first = False
             return
-        
-        # Для каждого нового токена обновляем прогресс-бар на 1
+
         self.pbar.update(1)
 
     def end(self):
-        # Вызывается, когда модель сгенерировала EOS
-        pass
+        if self.pbar:
+            self.pbar.close()

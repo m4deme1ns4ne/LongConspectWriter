@@ -4,10 +4,10 @@ from faster_whisper import WhisperModel
 from loguru import logger
 from tqdm import tqdm
 
-from src.ai_configs import STTModelConfig
+from src.ai_configs import STTModelConfig, STTAgent
 
 
-class FasterWhisper:
+class FasterWhisper(STTAgent):
     """Агент для локальной транскрибации аудио с помощью faster-whisper."""
 
     def __init__(self, config: STTModelConfig):
@@ -23,7 +23,7 @@ class FasterWhisper:
         )
         logger.success(f"Модель {self._config.model_size} успешно загружена!")
 
-    def transcribing(
+    def run(
         self,
         audio_file_path: str,
         output_dir: str = "data/example-transcrib",
