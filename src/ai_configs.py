@@ -9,6 +9,7 @@ import time
 import gc
 from transformers.generation.streamers import BaseStreamer
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 
 @dataclass
@@ -32,10 +33,12 @@ class InitConfig(LLMModelConfig):
     model: str
     torch_dtype: str | None = None
     device_map: str | None = None
+    agent_name: str | None = None
+    prompt: Path | None = None
 
     def __post_init__(self) -> None:
         if self.device_map is None:
-            self.device_map = "auto" if torch.cuda.is_available() else "cpu"
+            self.device_map = {"": 0} if torch.cuda.is_available() else "cpu"
 
         if self.torch_dtype is None:
             self.torch_dtype = (
@@ -81,15 +84,24 @@ class LLMAgent(Agent):
     def _generate(self):
         pass
 
+    @abstractmethod
+    def _load_prompts(self):
+        pass
+
+    @abstractmethod
+    def _build_prompt(self):
+        pass
+
     def __enter__(self):
         return self
-        
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         logger.info(f"Очистка памяти агента {self.__class__.__name__}...")
-        if hasattr(self, 'model'):
+        if hasattr(self, "model"):
             del self.model
-        if hasattr(self, 'tokenizer'):
+        if hasattr(self, "tokenizer"):
             del self.tokenizer
+
 
 class STTAgent(Agent):
     pass

@@ -51,20 +51,34 @@ class AgentDrafter(LLMAgent):
         self.tokenizer = AutoTokenizer.from_pretrained(self._init_config.model)
         logger.success(f"Загрузка токинайзера для {self._init_config.model} заверщена!")
 
-    def _generate(
-        self, user_prompt: str, system_prompt: str = None, streamer: BaseStreamer = None
-    ) -> str:
+        self.system_prompt, self.user_template = self._load_prompts()
+
+    def _load_prompts(self):
+        prompts = LoadPrompts.load_prompts(self._init_config.prompt)
+        system_prompt = prompts[self._init_config.agent_name]["system_prompt"]
+        user_template = prompts[self._init_config.agent_name]["user_template"]
+        return system_prompt, user_template
+
+    def _build_prompt(self, chunk: str, previous_summary: str):
+        user_prompt = self.user_template.format(
+            text=chunk, previous_summary=previous_summary
+        )
         messages = [
             {
                 "role": "system",
-                "content": system_prompt,
+                "content": self.system_prompt,
             },
             {"role": "user", "content": user_prompt},
         ]
-        text = self.tokenizer.apply_chat_template(
+        full_prompt = self.tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
-        model_inputs = self.tokenizer([text], return_tensors="pt").to(self.model.device)
+        return full_prompt
+
+    def _generate(self, prompt: str, streamer: BaseStreamer = None) -> str:
+        model_inputs = self.tokenizer([prompt], return_tensors="pt").to(
+            self.model.device
+        )
 
         with torch.no_grad():
             output = self.model.generate(
@@ -91,11 +105,6 @@ class AgentDrafter(LLMAgent):
             text=transcrib, model_name=self._init_config.model
         )
 
-        # 3. Подготовка промптов и инициализация
-        prompts = LoadPrompts.load_prompts(r"src\prompts\drafter.yaml")
-        system_prompt = prompts["drafter"]["system_prompt"]
-        user_template = prompts["drafter"]["user_template"]
-
         final_drafts = []
         previous_summary = "Это начало лекции, предыдущего контекста нет."
 
@@ -107,11 +116,6 @@ class AgentDrafter(LLMAgent):
             position=0,
         ) as pbar:
             for chunk in transcrib_chunks:
-
-                user_prompt = user_template.format(
-                    text=chunk, previous_summary=previous_summary
-                )
-
                 with tqdm(
                     total=self._gen_config.max_new_tokens,
                     desc="Генерация токенов",
@@ -123,8 +127,9 @@ class AgentDrafter(LLMAgent):
 
                     streamer = TqdmTokenStreamer(token_pbar)
                     response = self._generate(
-                        system_prompt=system_prompt,
-                        user_prompt=user_prompt,
+                        prompt=self._build_prompt(
+                            chunk=chunk, previous_summary=previous_summary
+                        ),
                         streamer=streamer,
                     )
 
@@ -149,4 +154,4 @@ class AgentDrafter(LLMAgent):
 
         logger.success(f"✅ Финальные мини-конспекты сохранены по пути: {out_filepath}")
 
-        return out_filepath
+        return final_drafts, out_filepath
