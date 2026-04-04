@@ -4,38 +4,23 @@ from loguru import logger
 import time
 from tqdm import tqdm
 import os
-from src.ai_configs import (
-    LoadPrompts,
-    TextsSplitter,
-    TqdmTokenStreamer,
-    InitConfig,
-    GenConfig,
-    LLMAgent,
-)
+from os import PathLike
+from src.ai_configs import LoadPrompts, InitConfig, GenConfig
 import torch
 from dataclasses import asdict
+from src.utils import TqdmTokenStreamer, TextsSplitter, bad_words
+from src.core.base_agent import BaseLLMAgent
 
 
-class AgentDrafter(LLMAgent):
-    def __init__(self, init_config: InitConfig, gen_config: GenConfig):
-        """
-        Сейчас ваш класс AgentDrafter загружает модель и
-        токенайзер в память каждый раз при вызове метода generate.
-        Это занимает время и память. В идеале их стоит загружать один
-        раз в __init__, чтобы генерировать ответы мгновенно при последующих вызовах.
-        """
+class AgentDrafter(BaseLLMAgent):
+    def __init__(self, init_config: InitConfig, gen_config: GenConfig) -> None:
         self._init_config = init_config
         self._gen_config = gen_config
         logger.success(
             f"Инициализация агента Drafter (Модель: {self._init_config.model}, Устройство: {self._init_config.device_map})"
         )
 
-        quant_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=self._init_config.torch_dtype,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_use_double_quant=True,
-        )
+        quant_config = self._load_quant_config()
 
         logger.info(f"Загрузка {self._init_config.model} в память...")
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -51,17 +36,29 @@ class AgentDrafter(LLMAgent):
         self.tokenizer = AutoTokenizer.from_pretrained(self._init_config.model)
         logger.success(f"Загрузка токинайзера для {self._init_config.model} заверщена!")
 
-        self.system_prompt, self.user_template = self._load_prompts()
+        self.system_prompt, self.user_template, self.negative_prompt = (
+            self._load_prompts()
+        )
 
-    def _load_prompts(self):
+    def _load_quant_config(self) -> BitsAndBytesConfig:
+        quant_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=self._init_config.torch_dtype,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+        )
+        return quant_config
+
+    def _load_prompts(self) -> tuple[str, str]:
         prompts = LoadPrompts.load_prompts(self._init_config.prompt)
         system_prompt = prompts[self._init_config.agent_name]["system_prompt"]
         user_template = prompts[self._init_config.agent_name]["user_template"]
-        return system_prompt, user_template
+        negative_prompt = prompts[self._init_config.agent_name]["negative_prompt"]
+        return system_prompt, user_template, negative_prompt
 
-    def _build_prompt(self, chunk: str, previous_summary: str):
+    def _build_prompt(self, chunk: str, previous_summary: str) -> str:
         user_prompt = self.user_template.format(
-            text=chunk, previous_summary=previous_summary
+            draft_text=chunk, previous_summary=previous_summary
         )
         messages = [
             {
@@ -75,14 +72,30 @@ class AgentDrafter(LLMAgent):
         )
         return full_prompt
 
-    def _generate(self, prompt: str, streamer: BaseStreamer = None) -> str:
+    def _generate(self, prompt: str, streamer: BaseStreamer | None = None) -> str:
         model_inputs = self.tokenizer([prompt], return_tensors="pt").to(
             self.model.device
         )
+        # Хардкод токенайзера, вынести потом в utils.py как отельный класс для DRY
+        # И создать отдельные методы для neg_promt и bad_words
+        negative_inputs = self.tokenizer(
+            [self.negative_prompt], return_tensors="pt"
+        ).to(self.model.device)
+        bad_words_ids = []
+        for word in bad_words:
+            ids = self.tokenizer.encode(word, add_special_tokens=False)
+            if ids:
+                bad_words_ids.append(ids)
 
         with torch.no_grad():
             output = self.model.generate(
-                **model_inputs, **asdict(self._gen_config), streamer=streamer
+                **model_inputs,
+                **asdict(self._gen_config),
+                streamer=streamer,
+                negative_prompt_ids=negative_inputs.input_ids,
+                negative_prompt_attention_mask=negative_inputs.attention_mask,
+                guidance_scale=1.5,
+                bad_words_ids=bad_words_ids,
             )
         output = [
             output_ids[len(input_ids) :]
@@ -93,7 +106,7 @@ class AgentDrafter(LLMAgent):
 
         return response
 
-    def run(self, path_transcrib: str):
+    def run(self, path_transcrib: str | PathLike) -> str:
         pure_transcrib_file_name = os.path.basename(path_transcrib)
 
         with open(path_transcrib, "r", encoding="utf-8") as file:
@@ -105,8 +118,9 @@ class AgentDrafter(LLMAgent):
             text=transcrib, model_name=self._init_config.model
         )
 
-        final_drafts = []
+        final_drafts: list[str] = []
         previous_summary = "Это начало лекции, предыдущего контекста нет."
+        ignored_chunks = 0
 
         with tqdm(
             total=len(transcrib_chunks),
@@ -121,10 +135,9 @@ class AgentDrafter(LLMAgent):
                     desc="Генерация токенов",
                     unit="токен",
                     colour="blue",
-                    leave=False,  # Убираем бар после завершения чанка
-                    position=1,  # Рисуем под основным баром
+                    leave=False,
+                    position=1,
                 ) as token_pbar:
-
                     streamer = TqdmTokenStreamer(token_pbar)
                     response = self._generate(
                         prompt=self._build_prompt(
@@ -132,14 +145,22 @@ class AgentDrafter(LLMAgent):
                         ),
                         streamer=streamer,
                     )
+                pbar.update(1)
+                if "[NO CONTENT FOUND]" in response:
+                    ignored_chunks += 1
+                    continue
 
                 final_drafts.append(response)
-                previous_summary = response
-                pbar.update(1)
+                previous_summary = response[-300:]
+
+        if not final_drafts:
+            return ""
+        
+        len_final_drafts = len(final_drafts)
 
         monolith_draft = "\n\n---\n\n".join(final_drafts)
 
-        safe_model_name = self._init_config.model.replace("/", "-")
+        safe_model_name = self._init_config.model.replace("/", "_")
 
         timestamp = int(time.time())
         out_filepath = os.path.join(
@@ -151,7 +172,9 @@ class AgentDrafter(LLMAgent):
         os.makedirs(os.path.dirname(out_filepath), exist_ok=True)
         with open(out_filepath, "w", encoding="utf-8") as f:
             f.write(monolith_draft)
+        logger.success(
+            f"Финальные мини-конспекты сохранены (валидных чанков: {len_final_drafts}). "
+            f"Сэкономлено чанков: {ignored_chunks}, потенциальная экономия в токенах: {ignored_chunks * self._gen_config.max_new_tokens}"
+        )
 
-        logger.success(f"✅ Финальные мини-конспекты сохранены по пути: {out_filepath}")
-
-        return final_drafts, out_filepath
+        return out_filepath

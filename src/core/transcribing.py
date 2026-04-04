@@ -1,16 +1,18 @@
 import time
 import os
+from os import PathLike
 from faster_whisper import WhisperModel
 from loguru import logger
 from tqdm import tqdm
 
-from src.ai_configs import STTModelConfig, STTAgent
+from src.ai_configs import STTModelConfig
+from src.core.base_agent import BaseSTTAgent
 
 
-class FasterWhisper(STTAgent):
+class FasterWhisper(BaseSTTAgent):
     """Агент для локальной транскрибации аудио с помощью faster-whisper."""
 
-    def __init__(self, config: STTModelConfig):
+    def __init__(self, config: STTModelConfig) -> None:
         self._config = config
         logger.success(
             f"Инициализация агента STT (Модель: {self._config.model_size}, Устройство: {self._config.device})"
@@ -25,8 +27,8 @@ class FasterWhisper(STTAgent):
 
     def run(
         self,
-        audio_file_path: str,
-        output_dir: str = "data/example-transcrib",
+        audio_file_path: str | PathLike,
+        output_dir: str | PathLike = "data/example-transcrib",
         language_audio: str | None = None,
     ) -> str:
         """
@@ -38,7 +40,7 @@ class FasterWhisper(STTAgent):
             language_audio (str | None): Язык аудиофайла, если значение None, то модель сама распознает язык.
 
         Returns:
-            None
+            str: Путь к сохраненному файлу транскрипции.
         """
         if not os.path.exists(audio_file_path):
             logger.error(f"Файл не найден: {audio_file_path}")

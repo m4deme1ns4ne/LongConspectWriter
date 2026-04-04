@@ -1,19 +1,17 @@
-from src.ai_configs import (
-    STTModelConfig,
-    LLMModelConfig,
-    decorator_v_ram_cleaner,
-    InitConfig,
-    GenConfig,
-)
+from src.ai_configs import STTModelConfig, InitConfig, GenConfig
 from src.core.transcribing import FasterWhisper
 from src.core.agent_drafter import AgentDrafter
 from src.core.agent_synthesizer import AgentSynthesizer
 from loguru import logger
 import multiprocessing
 from pathlib import Path
+from src.core.v_ram_manager import decorator_v_ram_cleaner
+from os import PathLike
 
 
-def _run_stt_process(audio_file_path: str, result_queue: multiprocessing.Queue):
+def _run_stt_process(
+    audio_file_path: str | PathLike, result_queue: multiprocessing.Queue
+) -> None:
     try:
         stt_model_config = STTModelConfig(model_size="large-v3-turbo")
         faster_whisper = FasterWhisper(stt_model_config)
@@ -23,10 +21,10 @@ def _run_stt_process(audio_file_path: str, result_queue: multiprocessing.Queue):
         result_queue.put({"status": "error", "error": str(e)})
 
 
-class ConspectiusPipline:
-
+class ConspectiusPipeline:
     @decorator_v_ram_cleaner
-    def _call_sst(self, audio_file_path: str) -> str:
+    def _call_sst(self, audio_file_path: str | PathLike) -> str:
+
         logger.info("Запуск STT агента в изолированном процессе...")
         # Создаем канал связи (Очередь) между основным и фоновым процессом
         result_queue = multiprocessing.Queue()
@@ -53,7 +51,7 @@ class ConspectiusPipline:
             )
 
     @decorator_v_ram_cleaner
-    def _call_drafter(self, path_transcrib: str) -> tuple[list[str], str]:
+    def _call_drafter(self, path_transcrib: str | PathLike) -> str:
         drafter_init_config = InitConfig(
             model="Qwen/Qwen2.5-7B-Instruct",
             agent_name="drafter",
@@ -74,7 +72,7 @@ class ConspectiusPipline:
             return chunk_conspects_path
 
     @decorator_v_ram_cleaner
-    def _call_synthesizer(self, chunk_conspects_path: str) -> str:
+    def _call_synthesizer(self, chunk_conspects_path: str | PathLike) -> str:
         synthesizer_init_config = InitConfig(
             model="THUDM/LongWriter-llama3.1-8b",
             agent_name="synthesizer",
@@ -82,8 +80,8 @@ class ConspectiusPipline:
         )
         synthesizer_gen_config = GenConfig(
             max_new_tokens=4096,
-            repetition_penalty=1.15,
-            temperature=0.3,
+            repetition_penalty=1.05,
+            temperature=0.5,
             top_p=0.9,
             do_sample=True,
         )
@@ -94,7 +92,7 @@ class ConspectiusPipline:
             final_conspect_path = synthesizer.run(chunk_conspects_path)
             return final_conspect_path
 
-    def pipline(self, audio_file_path: str | None = None):
+    def pipeline(self, audio_file_path: str | PathLike | None = None) -> str | None:
         # Это нужно для тестирования _call_drafter и _call_synthesizer
         if audio_file_path is None:
             transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Защита инф-1775083687.txt"
@@ -102,12 +100,11 @@ class ConspectiusPipline:
             transcript_path = self._call_sst(audio_file_path)
             logger.success(f"Получен путь для транскрибации: {transcript_path}")
 
-        draft_chunks, chunk_conspects_path = self._call_drafter(transcript_path)
+        chunk_conspects_path = self._call_drafter(transcript_path)
+        if not chunk_conspects_path:
+            return
         logger.success(
             f"Получен путь до мини-конспектов: {chunk_conspects_path} "
-            f"(чанков: {len(draft_chunks)})"
         )
         final_conspect_path = self._call_synthesizer(chunk_conspects_path)
-        logger.success(f"Получен путь до финального конспекта: {final_conspect_path}")
-
         return final_conspect_path
