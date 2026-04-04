@@ -77,7 +77,10 @@ class AgentSynthesizer(BaseLLMAgent):
 
         logger.info("Начало генерации финального конспекта...")
         output = self.model.generate(
-            **inputs, **asdict(self._gen_config), streamer=streamer, bad_words_ids=bad_words_ids,
+            **inputs,
+            **asdict(self._gen_config),
+            streamer=streamer,
+            bad_words_ids=bad_words_ids,
         )[0]
 
         response = self.tokenizer.decode(

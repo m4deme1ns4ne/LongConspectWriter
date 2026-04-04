@@ -40,6 +40,7 @@ class TqdmTokenStreamer(BaseStreamer):
             self.pbar.close()
 
 
+# Потом поменять на функцию нормальную
 bad_words = [
     # ИИ-мусор и услужливость
     "конечно",

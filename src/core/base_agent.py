@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from loguru import logger
+from src.core.v_ram_manager import VRamCleaner
 
 
 class BaseAgent(ABC):
@@ -7,21 +8,7 @@ class BaseAgent(ABC):
     def run(self) -> object:
         pass
 
-
-class BaseLLMAgent(BaseAgent):
-    @abstractmethod
-    def _generate(self) -> str:
-        pass
-
-    @abstractmethod
-    def _load_prompts(self) -> tuple[str, str]:
-        pass
-
-    @abstractmethod
-    def _build_prompt(self) -> str:
-        pass
-
-    def __enter__(self) -> "BaseLLMAgent":
+    def __enter__(self) -> "BaseAgent":
         return self
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
@@ -30,6 +17,25 @@ class BaseLLMAgent(BaseAgent):
             del self.model
         if hasattr(self, "tokenizer"):
             del self.tokenizer
+        VRamCleaner.empty_vram(caller_name=self.__class__.__name__)
+
+
+class BaseLLMAgent(BaseAgent):
+    @abstractmethod
+    def _generate(self) -> str:
+        pass
+
+    @abstractmethod
+    def _load_prompts(self) -> tuple:
+        pass
+
+    @abstractmethod
+    def _build_prompt(self) -> str:
+        pass
+
+    @abstractmethod
+    def _load_quant_config(self) -> object:
+        pass
 
 
 class BaseSTTAgent(BaseAgent):

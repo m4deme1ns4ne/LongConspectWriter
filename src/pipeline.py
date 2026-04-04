@@ -5,7 +5,6 @@ from src.core.agent_synthesizer import AgentSynthesizer
 from loguru import logger
 import multiprocessing
 from pathlib import Path
-from src.core.v_ram_manager import decorator_v_ram_cleaner
 from os import PathLike
 
 
@@ -22,7 +21,6 @@ def _run_stt_process(
 
 
 class ConspectiusPipeline:
-    @decorator_v_ram_cleaner
     def _call_sst(self, audio_file_path: str | PathLike) -> str:
 
         logger.info("Запуск STT агента в изолированном процессе...")
@@ -50,12 +48,11 @@ class ConspectiusPipeline:
                 "Процесс STT завершился, но не вернул результат. Возможно, произошло жесткое падение CTranslate2."
             )
 
-    @decorator_v_ram_cleaner
     def _call_drafter(self, path_transcrib: str | PathLike) -> str:
         drafter_init_config = InitConfig(
             model="Qwen/Qwen2.5-7B-Instruct",
             agent_name="drafter",
-            prompt=Path("src") / "prompts" / "drafter.yaml",
+            prompt=Path("src") / ("core") / "prompts.yaml",
         )
         drafter_gen_config = GenConfig(
             max_new_tokens=500,
@@ -71,12 +68,11 @@ class ConspectiusPipeline:
             chunk_conspects_path = drafter.run(path_transcrib)
             return chunk_conspects_path
 
-    @decorator_v_ram_cleaner
     def _call_synthesizer(self, chunk_conspects_path: str | PathLike) -> str:
         synthesizer_init_config = InitConfig(
             model="THUDM/LongWriter-llama3.1-8b",
             agent_name="synthesizer",
-            prompt=Path("src") / "prompts" / "drafter.yaml",
+            prompt=Path("src") / ("core") / "prompts.yaml",
         )
         synthesizer_gen_config = GenConfig(
             max_new_tokens=4096,
@@ -92,19 +88,24 @@ class ConspectiusPipeline:
             final_conspect_path = synthesizer.run(chunk_conspects_path)
             return final_conspect_path
 
+
     def pipeline(self, audio_file_path: str | PathLike | None = None) -> str | None:
         # Это нужно для тестирования _call_drafter и _call_synthesizer
-        if audio_file_path is None:
-            transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Защита инф-1775083687.txt"
-        else:
-            transcript_path = self._call_sst(audio_file_path)
-            logger.success(f"Получен путь для транскрибации: {transcript_path}")
+        # if audio_file_path is None:
+        #     litle_transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Защита инф-1775083687.txt"
+        #     # full_transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Защита инф-1775162216.txt"
+        #     transcript_path = litle_transcript_path
+        # else:
+        #     transcript_path = self._call_sst(audio_file_path)
+        #     logger.success(f"Получен путь для транскрибации: {transcript_path}")
 
-        chunk_conspects_path = self._call_drafter(transcript_path)
-        if not chunk_conspects_path:
-            return
-        logger.success(
-            f"Получен путь до мини-конспектов: {chunk_conspects_path} "
-        )
+        # chunk_conspects_path = self._call_drafter(transcript_path)
+        # if not chunk_conspects_path:
+        #     return
+
+        chunk_conspects_path = r"data\example-mini-conspect\Qwen_Qwen2.5-7B-Instruct-large-v3-turbo-cuda-float16-Лекция 1. -1775312903.txt-1775315971.txt"
+
+        logger.success(f"Получен путь до мини-конспектов: {chunk_conspects_path} ")
         final_conspect_path = self._call_synthesizer(chunk_conspects_path)
+
         return final_conspect_path

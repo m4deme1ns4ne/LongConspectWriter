@@ -1,7 +1,4 @@
-from collections.abc import Callable
 from loguru import logger
-import functools
-import time
 import gc
 import torch
 
@@ -26,7 +23,7 @@ class VRamUsage:
             return f"GPU (usage unavailable: {exc})"
 
 
-class _VRamCleaner:
+class VRamCleaner:
     @staticmethod
     def empty_vram(caller_name: str | None = None) -> None:
         owner = caller_name or "unknown"
@@ -50,23 +47,23 @@ class _VRamCleaner:
             logger.exception(f"[{owner}] Не удалось корректно очистить VRAM.")
 
 
-def decorator_v_ram_cleaner(func: Callable[..., object]) -> Callable[..., object]:
-    @functools.wraps(func)
-    def wrapper(*args: object, **kwargs: object) -> object:
-        name = func.__qualname__
-        start = time.perf_counter()
+# def decorator_v_ram_cleaner(func: Callable[..., object]) -> Callable[..., object]:
+#     @functools.wraps(func)
+#     def wrapper(*args: object, **kwargs: object) -> object:
+#         name = func.__qualname__
+#         start = time.perf_counter()
 
-        try:
-            result = func(*args, **kwargs)
-        except Exception:
-            elapsed = time.perf_counter() - start
-            logger.exception(f"[{name}] Упал через {elapsed:.1f} сек.")
-            raise
-        else:
-            elapsed = time.perf_counter() - start
-            logger.success(f"[{name}] Завершен за {elapsed:.1f} сек.")
-            return result
-        finally:
-            _VRamCleaner.empty_vram(caller_name=name)
+#         try:
+#             result = func(*args, **kwargs)
+#         except Exception:
+#             elapsed = time.perf_counter() - start
+#             logger.exception(f"[{name}] Упал через {elapsed:.1f} сек.")
+#             raise
+#         else:
+#             elapsed = time.perf_counter() - start
+#             logger.success(f"[{name}] Завершен за {elapsed:.1f} сек.")
+#             return result
+#         finally:
+#             _VRamCleaner.empty_vram(caller_name=name)
 
-    return wrapper
+#     return wrapper
