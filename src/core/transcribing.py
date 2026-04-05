@@ -62,20 +62,26 @@ class FasterWhisper(BaseSTTAgent):
             beam_size=5,  # Баланс между скоростью и качеством (5 - стандарт)
             language=language_audio,  # Жестко задаем язык, чтобы модель не тратила время на определение
             vad_filter=True,  # Включаем детектор голоса (игнорирует тишину)
+            condition_on_previous_text=False,
+            no_speech_threshold=0.45,
+            compression_ratio_threshold=2.4,
             vad_parameters=dict(
-                min_silence_duration_ms=500
-            ),  # Настройка чувствительности тишины
+                min_silence_duration_ms=500,
+                speech_pad_ms=400,
+                threshold=0.7
+            )
         )
 
-        logger.info(
-            f"Определен язык: {info.language} с вероятностью {info.language_probability:.2f}"
-        )
-
-        # Срез [:3] возьмет только топ-3 самых вероятных языков (список уже отсортирован по убыванию)
-        top_3_langs = [
-            (lang, round(prob, 2)) for lang, prob in info.all_language_probs[:3]
-        ]
-        logger.info(f"Топ-3 альтернативных языков: {top_3_langs}")
+        if info.all_language_probs:
+            logger.info(
+                f"Определен язык: {info.language} с вероятностью {info.language_probability:.2f}"
+            )
+            top_3_langs = [
+                (lang, round(prob, 2)) for lang, prob in info.all_language_probs[:3]
+            ]
+            logger.info(f"Топ-3 альтернативных языков: {top_3_langs}")
+        else:
+            logger.info(f"Вероятности альтернативных языков недоступны, язык был задан жестко: {language_audio}")
 
         # Оставляем параметры для дебага
         logger.info(f"Параметры транскрибации: {info.transcription_options}")
@@ -103,7 +109,7 @@ class FasterWhisper(BaseSTTAgent):
                 colour="green",
             ) as pbar:
                 for segment in segments:
-                    text = segment.text
+                    text = segment.text.strip()
                     file.write(f"{text}\n")
 
                     file.flush()

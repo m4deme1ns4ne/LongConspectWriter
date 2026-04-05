@@ -10,7 +10,9 @@ from src.ai_configs import InitConfig, LoadPrompts, GenConfig
 from dataclasses import asdict
 from transformers.generation.streamers import BaseStreamer
 from src.core.base_agent import BaseLLMAgent
-from src.utils import TqdmTokenStreamer, bad_words
+from src.utils import TqdmTokenStreamer, log_retry_attempt
+from tenacity import retry, stop_after_attempt, wait_fixed
+import src.utils as utils
 
 
 class AgentSynthesizer(BaseLLMAgent):
@@ -18,7 +20,7 @@ class AgentSynthesizer(BaseLLMAgent):
         self._init_config = init_config
         self._gen_config = gen_config
         logger.success(
-            f"Инициализация агента Drafter (Synthesizer: {self._init_config.model}, Устройство: {self._init_config.device_map})"
+            f"Инициализация агента Synthesizer (Модель: {self._init_config.model}, Устройство: {self._init_config.device_map})"
         )
 
         quant_config = self._load_quant_config()
@@ -33,11 +35,12 @@ class AgentSynthesizer(BaseLLMAgent):
         )
         logger.success(f"Модель {self._init_config.model} загружена!")
 
-        logger.info(f"Загрузка токинайзера для {self._init_config.model} в память...")
+        logger.info(f"Загрузка токенайзера для {self._init_config.model} в память...")
         self.tokenizer = AutoTokenizer.from_pretrained(self._init_config.model)
-        logger.success(f"Загрузка токинайзера для {self._init_config.model} заверщена!")
+        logger.success(f"Загрузка токенайзера для {self._init_config.model} завершена!")
 
         self.system_prompt, self.user_template = self._load_prompts()
+        self.bad_words_ids = self._tokenize_bad_words_ids()
 
     def _load_quant_config(self) -> BitsAndBytesConfig:
         quant_config = BitsAndBytesConfig(
@@ -48,7 +51,7 @@ class AgentSynthesizer(BaseLLMAgent):
         )
         return quant_config
 
-    def _load_prompts(self) -> tuple[str, str]:
+    def _load_prompts(self) -> tuple[str, str, str]:
         prompts = LoadPrompts.load_prompts(self._init_config.prompt)
         system_prompt = prompts[self._init_config.agent_name]["system_prompt"]
         user_template = prompts[self._init_config.agent_name]["user_template"]
@@ -63,24 +66,28 @@ class AgentSynthesizer(BaseLLMAgent):
         )
 
         return full_prompt
+    
+    def _tokenize_bad_words_ids(self) -> list:
+        bad_words_ids = utils.bad_words_id_generate(self.tokenizer)
+        return bad_words_ids
 
+    @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_fixed(5),
+            before_sleep=log_retry_attempt,
+            reraise=True
+        )
     def _generate(self, prompt: str, streamer: BaseStreamer | None = None) -> str:
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
         context_length = inputs.input_ids.shape[-1]
         logger.info(f"Длина входного контекста: {context_length} токенов.")
-
-        bad_words_ids = []
-        for word in bad_words:
-            ids = self.tokenizer.encode(word, add_special_tokens=False)
-            if ids:
-                bad_words_ids.append(ids)
 
         logger.info("Начало генерации финального конспекта...")
         output = self.model.generate(
             **inputs,
             **asdict(self._gen_config),
             streamer=streamer,
-            bad_words_ids=bad_words_ids,
+            bad_words_ids=self.bad_words_ids,
         )[0]
 
         response = self.tokenizer.decode(

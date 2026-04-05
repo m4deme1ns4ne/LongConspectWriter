@@ -13,9 +13,10 @@ from os import PathLike
 from src.ai_configs import LoadPrompts, InitConfig, GenConfig
 import torch
 from dataclasses import asdict
-from src.utils import TqdmTokenStreamer, TextsSplitter
+from src.utils import TqdmTokenStreamer, TextsSplitter, log_retry_attempt
 import src.utils as utils
 from src.core.base_agent import BaseLLMAgent
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 
 class AgentDrafter(BaseLLMAgent):
@@ -38,9 +39,9 @@ class AgentDrafter(BaseLLMAgent):
         )
         logger.success(f"Модель {self._init_config.model} загружена!")
 
-        logger.info(f"Загрузка токинайзера для {self._init_config.model} в память...")
+        logger.info(f"Загрузка токенайзера для {self._init_config.model} в память...")
         self.tokenizer = AutoTokenizer.from_pretrained(self._init_config.model)
-        logger.success(f"Загрузка токинайзера для {self._init_config.model} завершена!")
+        logger.success(f"Загрузка токенайзера для {self._init_config.model} завершена!")
 
         self.system_prompt, self.user_template, self.negative_prompt = (
             self._load_prompts()
@@ -81,6 +82,12 @@ class AgentDrafter(BaseLLMAgent):
         )
         return full_prompt
 
+    @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_fixed(5),
+            before_sleep=log_retry_attempt,
+            reraise=True
+        )
     def _generate(self, prompt: str, streamer: BaseStreamer | None = None) -> str:
         model_inputs = self._tokenize(prompt)
 
@@ -104,11 +111,7 @@ class AgentDrafter(BaseLLMAgent):
         return response
 
     def _tokenize_bad_words_ids(self) -> list:
-        bad_words_ids = []
-        for word in utils.bad_words:
-            ids = self.tokenizer.encode(word, add_special_tokens=False)
-            if ids:
-                bad_words_ids.append(ids)
+        bad_words_ids = utils.bad_words_id_generate(self.tokenizer)
         return bad_words_ids
 
     def _tokenize(self, text: str) -> BatchEncoding:

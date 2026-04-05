@@ -8,19 +8,19 @@ from pathlib import Path
 from os import PathLike
 
 
-def _run_stt_process(
-    audio_file_path: str | PathLike, result_queue: multiprocessing.Queue
-) -> None:
-    try:
-        stt_model_config = STTModelConfig(model_size="large-v3-turbo")
-        faster_whisper = FasterWhisper(stt_model_config)
-        transcript_path = faster_whisper.run(audio_file_path=audio_file_path)
-        result_queue.put({"status": "success", "path": transcript_path})
-    except Exception as e:
-        result_queue.put({"status": "error", "error": str(e)})
-
-
 class ConspectiusPipeline:
+    def _run_stt_process(
+        self, audio_file_path: str | PathLike, result_queue: multiprocessing.Queue
+    ) -> None:
+        try:
+            stt_model_config = STTModelConfig(model_size="large-v3-turbo")
+            faster_whisper = FasterWhisper(stt_model_config)
+            transcript_path = faster_whisper.run(audio_file_path=audio_file_path, language_audio="ru")
+            result_queue.put({"status": "success", "path": transcript_path})
+        except Exception as e:
+            result_queue.put({"status": "error", "error": str(e)})
+
+
     def _call_sst(self, audio_file_path: str | PathLike) -> str:
 
         logger.info("Запуск STT агента в изолированном процессе...")
@@ -28,7 +28,7 @@ class ConspectiusPipeline:
         result_queue = multiprocessing.Queue()
         # Настраиваем фоновый процесс
         process = multiprocessing.Process(
-            target=_run_stt_process, args=(audio_file_path, result_queue)
+            target=self._run_stt_process, args=(audio_file_path, result_queue)
         )
         # Запускаем его
         process.start()
@@ -91,17 +91,17 @@ class ConspectiusPipeline:
 
     def pipeline(self, audio_file_path: str | PathLike | None = None) -> str | None:
         # Это нужно для тестирования _call_drafter и _call_synthesizer
-        # if audio_file_path is None:
-        #     litle_transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Защита инф-1775083687.txt"
-        #     # full_transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Защита инф-1775162216.txt"
-        #     transcript_path = litle_transcript_path
-        # else:
-        #     transcript_path = self._call_sst(audio_file_path)
-        #     logger.success(f"Получен путь для транскрибации: {transcript_path}")
+        if audio_file_path is None:
+            litle_transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Защита инф-1775083687.txt"
+            # full_transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Защита инф-1775162216.txt"
+            transcript_path = litle_transcript_path
+        else:
+            transcript_path = self._call_sst(audio_file_path)
+            logger.success(f"Получен путь для транскрибации: {transcript_path}")
 
-        # chunk_conspects_path = self._call_drafter(transcript_path)
-        # if not chunk_conspects_path:
-        #     return
+        chunk_conspects_path = self._call_drafter(transcript_path)
+        if not chunk_conspects_path:
+            return
 
         chunk_conspects_path = r"data\example-mini-conspect\Qwen_Qwen2.5-7B-Instruct-large-v3-turbo-cuda-float16-Лекция 1. -1775312903.txt-1775315971.txt"
 
