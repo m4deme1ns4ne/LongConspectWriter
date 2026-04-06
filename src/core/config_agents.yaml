@@ -1,0 +1,52 @@
+stt_init_config:
+  model_size_or_path: "large-v3-turbo"
+  output_dir: "data/example-transcrib"
+  device: null
+  compute_type: null 
+
+stt_gen_config:
+  beam_size: 5
+  vad_filter: true
+  condition_on_previous_text: false
+  no_speech_threshold: 0.45
+  compression_ratio_threshold: 2.4
+  language: "ru"
+
+vad_parameters_config:
+  min_silence_duration_ms: 500
+  speech_pad_ms: 400
+  threshold: 0.7
+
+
+drafter_init_config:
+  model: "Qwen/Qwen2.5-7B-Instruct"
+  agent_name: "drafter"
+  prompt: "src/core/prompts.yaml"
+  device_map: null
+  torch_dtype: null
+  attn_implementation: "sdpa"
+
+drafter_gen_config:
+  max_new_tokens: 500
+  repetition_penalty: 1.15
+  temperature: 0.1
+  top_p: 0.9
+  do_sample: true
+  guidance_scale: 1.5
+
+
+synthesizer_init_config:
+  model: "THUDM/LongWriter-llama3.1-8b"
+  agent_name: "synthesizer"
+  prompt: "src/core/prompts.yaml"
+  device_map: null
+  torch_dtype: null
+  trust_remote_code: true
+  
+
+synthesizer_gen_config:
+  max_new_tokens: 4096
+  repetition_penalty: 1.05
+  temperature: 0.5
+  top_p: 0.9
+  do_sample: true
