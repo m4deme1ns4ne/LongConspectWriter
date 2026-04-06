@@ -30,7 +30,7 @@ class VRamCleaner:
         gc.collect()
 
         if not torch.cuda.is_available():
-            logger.info(f"[{owner}] GPU не использовался.")
+            logger.debug(f"[{owner}] GPU не использовался.")
             return
 
         try:
@@ -42,7 +42,7 @@ class VRamCleaner:
             torch.cuda.empty_cache()
 
             after = VRamUsage.get_vram_usage()
-            logger.success(f"[{owner}] VRAM успешно очищена: {before} -> {after}")
+            logger.debug(f"[{owner}] VRAM очищена: {before} -> {after}")
         except Exception:
             logger.exception(f"[{owner}] Не удалось корректно очистить VRAM.")
 

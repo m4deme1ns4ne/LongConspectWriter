@@ -4,6 +4,8 @@ from loguru import logger
 from tqdm import tqdm
 from transformers.generation.streamers import BaseStreamer
 from src.bad_words import BAD_WORDS
+import yaml
+from os import PathLike
 
 
 class TextsSplitter:
@@ -18,7 +20,7 @@ class TextsSplitter:
         )
 
         chunks = splitter.split_text(text)
-        logger.success(
+        logger.info(
             f"Текст успешно разбит на {len(chunks)} фрагментов по {chunk_size} токенов каждый."
         )
         return chunks
@@ -29,12 +31,28 @@ class TqdmTokenStreamer(BaseStreamer):
         self.pbar = pbar
         self.is_first = True
 
+    @staticmethod
+    def _count_tokens(value: object) -> int:
+        if hasattr(value, "numel"):
+            return int(value.numel())
+
+        if isinstance(value, (list, tuple)):
+            count = 0
+            for item in value:
+                if isinstance(item, (list, tuple)):
+                    count += len(item)
+                else:
+                    count += 1
+            return count or 1
+
+        return 1
+
     def put(self, value: object) -> None:
         if self.is_first:
             self.is_first = False
             return
 
-        self.pbar.update(1)
+        self.pbar.update(self._count_tokens(value))
 
     def end(self) -> None:
         if self.pbar:
@@ -73,3 +91,10 @@ def bad_words_id_generate(tokenizer) -> list[list[int]]:
         bad_words_ids.append(ids)
 
     return bad_words_ids
+
+
+class LoadPrompts:
+    @staticmethod
+    def load_prompts(file_path: str | PathLike) -> dict[str, dict[str, str]]:
+        with open(file_path, "r", encoding="utf-8") as file:
+            return yaml.safe_load(file)
