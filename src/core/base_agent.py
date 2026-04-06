@@ -12,7 +12,7 @@ class BaseAgent(ABC):
         return self
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
-        logger.info(f"Очистка памяти от агента {self.__class__.__name__}...")
+        logger.debug(f"Очистка памяти от агента {self.__class__.__name__}...")
         if hasattr(self, "model"):
             del self.model
         if hasattr(self, "tokenizer"):

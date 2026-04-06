@@ -1,29 +1,27 @@
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    BitsAndBytesConfig,
-    BatchEncoding,
+    BitsAndBytesConfig
 )
 from transformers.generation.streamers import BaseStreamer
 from loguru import logger
 import time
 from tqdm import tqdm
 import os
+import sys
 from os import PathLike
-from src.ai_configs import LoadPrompts, InitConfig, GenConfig
 import torch
-from dataclasses import asdict
-from src.utils import TqdmTokenStreamer, TextsSplitter, log_retry_attempt
-import src.utils as utils
+from src.utils import TqdmTokenStreamer, TextsSplitter, log_retry_attempt, LoadPrompts, bad_words_id_generate
 from src.core.base_agent import BaseLLMAgent
 from tenacity import retry, stop_after_attempt, wait_fixed
+from src.ai_configs import LLMInitConfig, LLMGenConfig
 
 
 class AgentDrafter(BaseLLMAgent):
-    def __init__(self, init_config: InitConfig, gen_config: GenConfig) -> None:
+    def __init__(self, init_config: LLMInitConfig, gen_config: LLMGenConfig) -> None:
         self._init_config = init_config
         self._gen_config = gen_config
-        logger.success(
+        logger.info(
             f"Инициализация агента Drafter (Модель: {self._init_config.model}, Устройство: {self._init_config.device_map})"
         )
 
@@ -32,23 +30,24 @@ class AgentDrafter(BaseLLMAgent):
         logger.info(f"Загрузка {self._init_config.model} в память...")
         self.model = AutoModelForCausalLM.from_pretrained(
             self._init_config.model,
-            torch_dtype=self._init_config.torch_dtype,
-            device_map=self._init_config.device_map,
+            **self._init_config.model_kwargs(),
             quantization_config=quant_config,
-            attn_implementation="sdpa",
         )
-        logger.success(f"Модель {self._init_config.model} загружена!")
+        logger.info(f"Модель {self._init_config.model} загружена.")
 
         logger.info(f"Загрузка токенайзера для {self._init_config.model} в память...")
         self.tokenizer = AutoTokenizer.from_pretrained(self._init_config.model)
-        logger.success(f"Загрузка токенайзера для {self._init_config.model} завершена!")
+        logger.info(f"Токенайзер для {self._init_config.model} загружен.")
 
+        self.prompts = LoadPrompts.load_prompts(self._init_config.prompt)
         self.system_prompt, self.user_template, self.negative_prompt = (
             self._load_prompts()
         )
 
-        self.bad_words_ids = self._tokenize_bad_words_ids()
-        self.negative_inputs = self._tokenize(self.negative_prompt)
+        self.bad_words_ids = bad_words_id_generate(self.tokenizer)
+        self.negative_inputs = self.tokenizer(
+            [self.negative_prompt], return_tensors="pt"
+        ).to(self.model.device)
 
     def _load_quant_config(self) -> BitsAndBytesConfig:
         quant_config = BitsAndBytesConfig(
@@ -60,10 +59,9 @@ class AgentDrafter(BaseLLMAgent):
         return quant_config
 
     def _load_prompts(self) -> tuple[str, str]:
-        prompts = LoadPrompts.load_prompts(self._init_config.prompt)
-        system_prompt = prompts[self._init_config.agent_name]["system_prompt"]
-        user_template = prompts[self._init_config.agent_name]["user_template"]
-        negative_prompt = prompts[self._init_config.agent_name]["negative_prompt"]
+        system_prompt = self.prompts[self._init_config.agent_name]["system_prompt"]
+        user_template = self.prompts[self._init_config.agent_name]["user_template"]
+        negative_prompt = self.prompts[self._init_config.agent_name]["negative_prompt"]
         return system_prompt, user_template, negative_prompt
 
     def _build_prompt(self, chunk: str, previous_summary: str) -> str:
@@ -83,22 +81,30 @@ class AgentDrafter(BaseLLMAgent):
         return full_prompt
 
     @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_fixed(5),
-            before_sleep=log_retry_attempt,
-            reraise=True
-        )
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(5),
+        before_sleep=log_retry_attempt,
+        reraise=True,
+    )
     def _generate(self, prompt: str, streamer: BaseStreamer | None = None) -> str:
-        model_inputs = self._tokenize(prompt)
+        model_inputs = self.tokenizer([prompt], return_tensors="pt").to(
+            self.model.device
+        )
+        generation_kwargs = self._gen_config.generation_kwargs(
+            exclude={
+                "negative_prompt_ids",
+                "negative_prompt_attention_mask",
+                "bad_words_ids",
+            }
+        )
 
         with torch.no_grad():
             output = self.model.generate(
                 **model_inputs,
-                **asdict(self._gen_config),
+                **generation_kwargs,
                 streamer=streamer,
                 negative_prompt_ids=self.negative_inputs.input_ids,
                 negative_prompt_attention_mask=self.negative_inputs.attention_mask,
-                guidance_scale=1.5,
                 bad_words_ids=self.bad_words_ids,
             )
         output = [
@@ -110,25 +116,15 @@ class AgentDrafter(BaseLLMAgent):
 
         return response
 
-    def _tokenize_bad_words_ids(self) -> list:
-        bad_words_ids = utils.bad_words_id_generate(self.tokenizer)
-        return bad_words_ids
-
-    def _tokenize(self, text: str) -> BatchEncoding:
-        output = self.tokenizer([text], return_tensors="pt").to(self.model.device)
-        return output
-
     def run(self, path_transcrib: str | PathLike) -> str:
         pure_transcrib_file_name = os.path.basename(path_transcrib)
 
         with open(path_transcrib, "r", encoding="utf-8") as file:
             transcrib = file.read()
-            token_count = len(
-                self.tokenizer.encode(transcrib, add_special_tokens=False)
-            )
-            logger.info(
-                f"Общая длина транскрибации: {len(transcrib)} символов -> {token_count} токенов."
-            )
+        token_count = len(self.tokenizer.encode(transcrib, add_special_tokens=False))
+        logger.info(
+            f"Общая длина транскрибации: {len(transcrib)} символов или {token_count} токенов."
+        )
 
         # 2. Нарезка на чанки
         transcrib_chunks = TextsSplitter.split_text(
@@ -145,6 +141,8 @@ class AgentDrafter(BaseLLMAgent):
             desc="Конспекты",
             colour="green",
             position=0,
+            file=sys.stdout,
+            dynamic_ncols=True,
         ) as pbar:
             for chunk in transcrib_chunks:
                 with tqdm(
@@ -154,6 +152,8 @@ class AgentDrafter(BaseLLMAgent):
                     colour="blue",
                     leave=False,
                     position=1,
+                    file=sys.stdout,
+                    dynamic_ncols=True,
                 ) as token_pbar:
                     streamer = TqdmTokenStreamer(token_pbar)
                     response = self._generate(
@@ -168,9 +168,10 @@ class AgentDrafter(BaseLLMAgent):
                     continue
 
                 final_drafts.append(response)
-                previous_summary = response[-300:]
+                previous_summary = " ".join(response.split()[-40:])
 
         if not final_drafts:
+            logger.warning("Drafter не нашел ни одного содержательного чанка.")
             return ""
 
         len_final_drafts = len(final_drafts)
@@ -192,8 +193,10 @@ class AgentDrafter(BaseLLMAgent):
         logger.success(
             f"Финальные мини-конспекты сохранены (валидных чанков: {len_final_drafts}). "
         )
-        logger.warning(
-            f"Сэкономлено чанков: {ignored_chunks}, потенциальная экономия в токенах: {ignored_chunks * self._gen_config.max_new_tokens}"
-        )
+        if ignored_chunks:
+            logger.info(
+                f"Пропущено пустых чанков: {ignored_chunks}, потенциальная экономия: "
+                f"{ignored_chunks * self._gen_config.max_new_tokens} токенов."
+            )
 
         return out_filepath

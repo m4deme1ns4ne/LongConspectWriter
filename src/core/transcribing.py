@@ -1,34 +1,33 @@
 import time
 import os
+import sys
 from os import PathLike
 from faster_whisper import WhisperModel
 from loguru import logger
 from tqdm import tqdm
-
-from src.ai_configs import STTModelConfig
 from src.core.base_agent import BaseSTTAgent
+from src.ai_configs import STTInitConfig, STTGenConfig
 
 
 class FasterWhisper(BaseSTTAgent):
     """Агент для локальной транскрибации аудио с помощью faster-whisper."""
 
-    def __init__(self, config: STTModelConfig) -> None:
-        self._config = config
-        logger.success(
-            f"Инициализация агента STT (Модель: {self._config.model_size}, Устройство: {self._config.device})"
+    def __init__(self, init_config: STTInitConfig, gen_config: STTGenConfig) -> None:
+        self._init_config = init_config
+        self._gen_config = gen_config
+        logger.info(
+            f"Инициализация агента STT (Модель: {self._init_config.model_size_or_path}, Устройство: {self._init_config.device})"
         )
-        logger.info(f"Загрузка {self._config.model_size} в память...")
+        logger.info(f"Загрузка {self._init_config.model_size_or_path} в память...")
         self.model = WhisperModel(
-            self._config.model_size,
-            device=self._config.device,
-            compute_type=self._config.compute_type,
+            self._init_config.model_size_or_path,
+            **self._init_config.model_kwargs(),
         )
-        logger.success(f"Модель {self._config.model_size} успешно загружена!")
+        logger.info(f"Модель {self._init_config.model_size_or_path} загружена.")
 
     def run(
         self,
         audio_file_path: str | PathLike,
-        output_dir: str | PathLike = "data/example-transcrib",
         language_audio: str | None = None,
     ) -> str:
         """
@@ -45,31 +44,25 @@ class FasterWhisper(BaseSTTAgent):
         if not os.path.exists(audio_file_path):
             logger.error(f"Файл не найден: {audio_file_path}")
             raise FileNotFoundError(f"Файла {audio_file_path}")
-        os.makedirs(output_dir, exist_ok=True)
-        logger.success(f"Директория {output_dir} найдена!")
+        os.makedirs(self._init_config.output_dir, exist_ok=True)
+        logger.debug(f"Каталог для транскрибации готов: {self._init_config.output_dir}")
 
         timestamp = int(time.time())
         pure_audio_file_name = os.path.basename(audio_file_path)
-        transcrib_file_name = f"{self._config.model_size}-{self._config.device}-{self._config.compute_type}-{pure_audio_file_name[:10]}-{timestamp}.txt"
-        logger.info(f"Итоговое название файла: {transcrib_file_name}")
+        transcrib_file_name = f"{self._init_config.model_size_or_path}-{self._init_config.device}-{self._init_config.compute_type}-{pure_audio_file_name[:10]}-{timestamp}.txt"
+        logger.debug(f"Итоговое название файла: {transcrib_file_name}")
 
         logger.info(f"Начинаем обработку аудиофайла файла: {audio_file_path}...")
         start_time = time.time()
 
         # Метод transcribe автоматически режет длинное аудио на правильные куски
+        transcribe_kwargs = self._gen_config.transcribe_kwargs()
+        if language_audio is not None:
+            transcribe_kwargs["language"] = language_audio
+
         segments, info = self.model.transcribe(
-            audio_file_path,
-            beam_size=5,  # Баланс между скоростью и качеством (5 - стандарт)
-            language=language_audio,  # Жестко задаем язык, чтобы модель не тратила время на определение
-            vad_filter=True,  # Включаем детектор голоса (игнорирует тишину)
-            condition_on_previous_text=False,
-            no_speech_threshold=0.45,
-            compression_ratio_threshold=2.4,
-            vad_parameters=dict(
-                min_silence_duration_ms=500,
-                speech_pad_ms=400,
-                threshold=0.7
-            )
+            audio=audio_file_path,
+            **transcribe_kwargs,
         )
 
         if info.all_language_probs:
@@ -79,12 +72,14 @@ class FasterWhisper(BaseSTTAgent):
             top_3_langs = [
                 (lang, round(prob, 2)) for lang, prob in info.all_language_probs[:3]
             ]
-            logger.info(f"Топ-3 альтернативных языков: {top_3_langs}")
+            logger.debug(f"Топ-3 альтернативных языков: {top_3_langs}")
         else:
-            logger.info(f"Вероятности альтернативных языков недоступны, язык был задан жестко: {language_audio}")
+            logger.info(
+                f"Язык был задан явно, вероятности альтернатив недоступны: {language_audio}"
+            )
 
         # Оставляем параметры для дебага
-        logger.info(f"Параметры транскрибации: {info.transcription_options}")
+        logger.debug(f"Параметры транскрибации: {info.transcription_options}")
 
         # Считаем сэкономленное время
         duration_mins = info.duration / 60
@@ -97,9 +92,9 @@ class FasterWhisper(BaseSTTAgent):
             logger.info(
                 f"Длительность полезного сигнала (без тишины): {vad_mins:.2f} мин."
             )
-            logger.success(f"VAD-фильтр вырезал {saved_mins:.2f} мин. тишины!")
+            logger.info(f"VAD-фильтр вырезал {saved_mins:.2f} мин. тишины.")
 
-        final_path = f"{output_dir}/{transcrib_file_name}"
+        final_path = os.path.join(self._init_config.output_dir, transcrib_file_name)
 
         with open(final_path, "x", encoding="utf-8") as file:
             with tqdm(
@@ -107,6 +102,8 @@ class FasterWhisper(BaseSTTAgent):
                 unit=" аудио-сек",
                 desc="Транскрибация",
                 colour="green",
+                file=sys.stdout,
+                dynamic_ncols=True,
             ) as pbar:
                 for segment in segments:
                     text = segment.text.strip()

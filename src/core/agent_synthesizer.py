@@ -2,24 +2,23 @@ import os
 from os import PathLike
 from tqdm import tqdm
 import time
+import sys
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from loguru import logger
-from src.ai_configs import InitConfig, LoadPrompts, GenConfig
-from dataclasses import asdict
 from transformers.generation.streamers import BaseStreamer
 from src.core.base_agent import BaseLLMAgent
-from src.utils import TqdmTokenStreamer, log_retry_attempt
+from src.utils import TqdmTokenStreamer, log_retry_attempt, LoadPrompts, bad_words_id_generate
 from tenacity import retry, stop_after_attempt, wait_fixed
-import src.utils as utils
+from src.ai_configs import LLMInitConfig, LLMGenConfig
 
 
 class AgentSynthesizer(BaseLLMAgent):
-    def __init__(self, init_config: InitConfig, gen_config: GenConfig) -> None:
+    def __init__(self, init_config: LLMInitConfig, gen_config: LLMGenConfig) -> None:
         self._init_config = init_config
         self._gen_config = gen_config
-        logger.success(
+        logger.info(
             f"Инициализация агента Synthesizer (Модель: {self._init_config.model}, Устройство: {self._init_config.device_map})"
         )
 
@@ -28,19 +27,18 @@ class AgentSynthesizer(BaseLLMAgent):
         logger.info(f"Загрузка {self._init_config.model} в память...")
         self.model = AutoModelForCausalLM.from_pretrained(
             self._init_config.model,
+            **self._init_config.model_kwargs(),
             quantization_config=quant_config,
-            device_map=self._init_config.device_map,
-            trust_remote_code=True,
-            attn_implementation="sdpa",
         )
-        logger.success(f"Модель {self._init_config.model} загружена!")
+        logger.info(f"Модель {self._init_config.model} загружена.")
 
         logger.info(f"Загрузка токенайзера для {self._init_config.model} в память...")
         self.tokenizer = AutoTokenizer.from_pretrained(self._init_config.model)
-        logger.success(f"Загрузка токенайзера для {self._init_config.model} завершена!")
+        logger.info(f"Токенайзер для {self._init_config.model} загружен.")
 
+        self.prompts = LoadPrompts.load_prompts(self._init_config.prompt)
         self.system_prompt, self.user_template = self._load_prompts()
-        self.bad_words_ids = self._tokenize_bad_words_ids()
+        self.bad_words_ids = bad_words_id_generate(self.tokenizer)
 
     def _load_quant_config(self) -> BitsAndBytesConfig:
         quant_config = BitsAndBytesConfig(
@@ -51,10 +49,9 @@ class AgentSynthesizer(BaseLLMAgent):
         )
         return quant_config
 
-    def _load_prompts(self) -> tuple[str, str, str]:
-        prompts = LoadPrompts.load_prompts(self._init_config.prompt)
-        system_prompt = prompts[self._init_config.agent_name]["system_prompt"]
-        user_template = prompts[self._init_config.agent_name]["user_template"]
+    def _load_prompts(self) -> tuple[str]:
+        system_prompt = self.prompts[self._init_config.agent_name]["system_prompt"]
+        user_template = self.prompts[self._init_config.agent_name]["user_template"]
         return system_prompt, user_template
 
     def _build_prompt(self, draft_text: str) -> str:
@@ -66,26 +63,25 @@ class AgentSynthesizer(BaseLLMAgent):
         )
 
         return full_prompt
-    
-    def _tokenize_bad_words_ids(self) -> list:
-        bad_words_ids = utils.bad_words_id_generate(self.tokenizer)
-        return bad_words_ids
 
     @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_fixed(5),
-            before_sleep=log_retry_attempt,
-            reraise=True
-        )
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(5),
+        before_sleep=log_retry_attempt,
+        reraise=True,
+    )
     def _generate(self, prompt: str, streamer: BaseStreamer | None = None) -> str:
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
         context_length = inputs.input_ids.shape[-1]
-        logger.info(f"Длина входного контекста: {context_length} токенов.")
+        logger.debug(f"Длина входного контекста: {context_length} токенов.")
+        generation_kwargs = self._gen_config.generation_kwargs(
+            exclude={"bad_words_ids"}
+        )
 
         logger.info("Начало генерации финального конспекта...")
         output = self.model.generate(
             **inputs,
-            **asdict(self._gen_config),
+            **generation_kwargs,
             streamer=streamer,
             bad_words_ids=self.bad_words_ids,
         )[0]
@@ -105,6 +101,8 @@ class AgentSynthesizer(BaseLLMAgent):
             desc="Генерация токенов",
             unit="токен",
             colour="blue",
+            file=sys.stdout,
+            dynamic_ncols=True,
         ) as token_pbar:
             with torch.no_grad():
                 streamer = TqdmTokenStreamer(token_pbar)
@@ -113,7 +111,7 @@ class AgentSynthesizer(BaseLLMAgent):
                     streamer=streamer,
                 )
 
-        logger.success("Генерация всех частей завершена!")
+        logger.info("Генерация финального конспекта завершена.")
 
         timestamp = int(time.time())
         safe_model_name = self._init_config.model.replace("/", "_")
@@ -127,4 +125,5 @@ class AgentSynthesizer(BaseLLMAgent):
         os.makedirs(os.path.dirname(out_filepath), exist_ok=True)
         with open(out_filepath, "x", encoding="utf-8") as f:
             f.write(final_text)
+        logger.success(f"Финальный конспект сохранен: {out_filepath}")
         return out_filepath
