@@ -11,26 +11,34 @@ class ConspectiusPipeline:
         self,
         stt_init_config,
         stt_gen_config,
+        stt_app_config,
         drafter_init_config,
         drafter_gen_config,
+        drafter_app_config,
         synthesizer_init_config,
         synthesizer_gen_config,
+        synthesizer_app_config,
     ):
         self.stt_init_config = stt_init_config
         self.stt_gen_config = stt_gen_config
+        self.stt_app_config = stt_app_config
         self.drafter_init_config = drafter_init_config
         self.drafter_gen_config = drafter_gen_config
+        self.drafter_app_config = drafter_app_config
         self.synthesizer_init_config = synthesizer_init_config
         self.synthesizer_gen_config = synthesizer_gen_config
+        self.synthesizer_app_config = synthesizer_app_config
 
     def _run_stt_process(
         self, audio_file_path: str | PathLike, result_queue: multiprocessing.Queue
     ) -> None:
         try:
-            faster_whisper = FasterWhisper(init_config=self.stt_init_config, gen_config=self.stt_gen_config)
-            transcript_path = faster_whisper.run(
-                audio_file_path=audio_file_path, language_audio="ru"
+            faster_whisper = FasterWhisper(
+                init_config=self.stt_init_config,
+                gen_config=self.stt_gen_config,
+                app_config=self.stt_app_config,
             )
+            transcript_path = faster_whisper.run(audio_file_path=audio_file_path)
             result_queue.put({"status": "success", "path": transcript_path})
         except Exception as e:
             result_queue.put({"status": "error", "error": str(e)})
@@ -64,7 +72,9 @@ class ConspectiusPipeline:
 
     def _call_drafter(self, path_transcrib: str | PathLike) -> str:
         with AgentDrafter(
-            init_config=self.drafter_init_config, gen_config=self.drafter_gen_config
+            init_config=self.drafter_init_config,
+            gen_config=self.drafter_gen_config,
+            app_config=self.drafter_app_config,
         ) as drafter:
             chunk_conspects_path = drafter.run(path_transcrib)
             return chunk_conspects_path
@@ -73,6 +83,7 @@ class ConspectiusPipeline:
         with AgentSynthesizer(
             init_config=self.synthesizer_init_config,
             gen_config=self.synthesizer_gen_config,
+            app_config=self.synthesizer_app_config,
         ) as synthesizer:
             final_conspect_path = synthesizer.run(chunk_conspects_path)
             return final_conspect_path
@@ -81,8 +92,8 @@ class ConspectiusPipeline:
         # Это нужно для тестирования _call_drafter и _call_synthesizer
         # Убрать потом
         if audio_file_path is None:
-            litle_transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Защита инф-1775083687.txt"
-            # full_transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Защита инф-1775162216.txt"
+            litle_transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Лекция 1 (-1775502794.txt"
+            # full_transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Лекция 1. -1775312903.txt"
             transcript_path = litle_transcript_path
         else:
             transcript_path = self._call_sst(audio_file_path)

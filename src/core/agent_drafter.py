@@ -1,8 +1,4 @@
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    BitsAndBytesConfig
-)
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from transformers.generation.streamers import BaseStreamer
 from loguru import logger
 import time
@@ -11,35 +7,45 @@ import os
 import sys
 from os import PathLike
 import torch
-from src.utils import TqdmTokenStreamer, TextsSplitter, log_retry_attempt, LoadPrompts, bad_words_id_generate
+from src.utils import (
+    TqdmTokenStreamer,
+    TextsSplitter,
+    log_retry_attempt,
+    LoadPrompts,
+    bad_words_id_generate,
+)
 from src.core.base_agent import BaseLLMAgent
 from tenacity import retry, stop_after_attempt, wait_fixed
-from src.ai_configs import LLMInitConfig, LLMGenConfig
+from src.ai_configs import AppLLMConfig, LLMGenConfig, LLMInitConfig
+from dataclasses import asdict
 
 
 class AgentDrafter(BaseLLMAgent):
-    def __init__(self, init_config: LLMInitConfig, gen_config: LLMGenConfig) -> None:
+    def __init__(
+        self,
+        init_config: LLMInitConfig,
+        gen_config: LLMGenConfig,
+        app_config: AppLLMConfig,
+    ) -> None:
         self._init_config = init_config
         self._gen_config = gen_config
+        self._app_config = app_config
         logger.info(
-            f"Инициализация агента Drafter (Модель: {self._init_config.model}, Устройство: {self._init_config.device_map})"
+            f"Инициализация агента Drafter (Модель: {self._init_config.pretrained_model_name_or_path}, Устройство: {self._init_config.device_map})"
         )
 
-        quant_config = self._load_quant_config()
-
-        logger.info(f"Загрузка {self._init_config.model} в память...")
+        logger.info(f"Загрузка {self._init_config.pretrained_model_name_or_path} в память...")
         self.model = AutoModelForCausalLM.from_pretrained(
-            self._init_config.model,
-            **self._init_config.model_kwargs(),
-            quantization_config=quant_config,
+            **asdict(self._init_config),
+            quantization_config=self._load_quant_config(),
         )
-        logger.info(f"Модель {self._init_config.model} загружена.")
+        logger.info(f"Модель {self._init_config.pretrained_model_name_or_path} загружена.")
 
-        logger.info(f"Загрузка токенайзера для {self._init_config.model} в память...")
-        self.tokenizer = AutoTokenizer.from_pretrained(self._init_config.model)
-        logger.info(f"Токенайзер для {self._init_config.model} загружен.")
+        logger.info(f"Загрузка токенайзера для {self._init_config.pretrained_model_name_or_path} в память...")
+        self.tokenizer = AutoTokenizer.from_pretrained(self._init_config.pretrained_model_name_or_path)
+        logger.info(f"Токенайзер для {self._init_config.pretrained_model_name_or_path} загружен.")
 
-        self.prompts = LoadPrompts.load_prompts(self._init_config.prompt)
+        self.prompts = LoadPrompts.load_prompts(self._app_config.prompt_path)
         self.system_prompt, self.user_template, self.negative_prompt = (
             self._load_prompts()
         )
@@ -58,10 +64,10 @@ class AgentDrafter(BaseLLMAgent):
         )
         return quant_config
 
-    def _load_prompts(self) -> tuple[str, str]:
-        system_prompt = self.prompts[self._init_config.agent_name]["system_prompt"]
-        user_template = self.prompts[self._init_config.agent_name]["user_template"]
-        negative_prompt = self.prompts[self._init_config.agent_name]["negative_prompt"]
+    def _load_prompts(self) -> tuple[str, str, str]:
+        system_prompt = self.prompts[self._app_config.agent_name]["system_prompt"]
+        user_template = self.prompts[self._app_config.agent_name]["user_template"]
+        negative_prompt = self.prompts[self._app_config.agent_name]["negative_prompt"]
         return system_prompt, user_template, negative_prompt
 
     def _build_prompt(self, chunk: str, previous_summary: str) -> str:
@@ -90,18 +96,11 @@ class AgentDrafter(BaseLLMAgent):
         model_inputs = self.tokenizer([prompt], return_tensors="pt").to(
             self.model.device
         )
-        generation_kwargs = self._gen_config.generation_kwargs(
-            exclude={
-                "negative_prompt_ids",
-                "negative_prompt_attention_mask",
-                "bad_words_ids",
-            }
-        )
 
         with torch.no_grad():
             output = self.model.generate(
                 **model_inputs,
-                **generation_kwargs,
+                **asdict(self._gen_config),
                 streamer=streamer,
                 negative_prompt_ids=self.negative_inputs.input_ids,
                 negative_prompt_attention_mask=self.negative_inputs.attention_mask,
@@ -128,7 +127,7 @@ class AgentDrafter(BaseLLMAgent):
 
         # 2. Нарезка на чанки
         transcrib_chunks = TextsSplitter.split_text(
-            text=transcrib, model_name=self._init_config.model
+            text=transcrib, model_name=self._init_config.pretrained_model_name_or_path
         )
 
         final_drafts: list[str] = []
@@ -178,12 +177,11 @@ class AgentDrafter(BaseLLMAgent):
 
         monolith_draft = "\n\n---\n\n".join(final_drafts)
 
-        safe_model_name = self._init_config.model.replace("/", "_")
+        safe_model_name = self._init_config.pretrained_model_name_or_path.replace("/", "_")
 
         timestamp = int(time.time())
         out_filepath = os.path.join(
-            "data",
-            "example-mini-conspect",
+            self._app_config.output_dir,
             f"{safe_model_name}-{pure_transcrib_file_name}-{timestamp}.txt",
         )
 

@@ -1,8 +1,7 @@
 stt_init_config:
   model_size_or_path: "large-v3-turbo"
-  output_dir: "data/example-transcrib"
   device: null
-  compute_type: null 
+  compute_type: null
 
 stt_gen_config:
   beam_size: 5
@@ -11,19 +10,19 @@ stt_gen_config:
   no_speech_threshold: 0.45
   compression_ratio_threshold: 2.4
   language: "ru"
+  vad_parameters:
+    min_silence_duration_ms: 500
+    speech_pad_ms: 400
+    threshold: 0.7
 
-vad_parameters_config:
-  min_silence_duration_ms: 500
-  speech_pad_ms: 400
-  threshold: 0.7
-
+stt_app_config:
+  output_dir: "data/example-transcrib"
 
 drafter_init_config:
-  model: "Qwen/Qwen2.5-7B-Instruct"
-  agent_name: "drafter"
-  prompt: "src/core/prompts.yaml"
-  device_map: null
+  pretrained_model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
   torch_dtype: null
+  device_map: null
+  trust_remote_code: false
   attn_implementation: "sdpa"
 
 drafter_gen_config:
@@ -34,15 +33,17 @@ drafter_gen_config:
   do_sample: true
   guidance_scale: 1.5
 
+drafter_app_config:
+  agent_name: "drafter"
+  prompt_path: "src/core/prompts.yaml"
+  output_dir: "data/example-mini-conspect"
 
 synthesizer_init_config:
-  model: "THUDM/LongWriter-llama3.1-8b"
-  agent_name: "synthesizer"
-  prompt: "src/core/prompts.yaml"
-  device_map: null
+  pretrained_model_name_or_path: "THUDM/LongWriter-llama3.1-8b"
   torch_dtype: null
+  device_map: null
   trust_remote_code: true
-  
+  attn_implementation: null
 
 synthesizer_gen_config:
   max_new_tokens: 4096
@@ -50,3 +51,8 @@ synthesizer_gen_config:
   temperature: 0.5
   top_p: 0.9
   do_sample: true
+
+synthesizer_app_config:
+  agent_name: "synthesizer"
+  prompt_path: "src/core/prompts.yaml"
+  output_dir: "data/example-conspect"
