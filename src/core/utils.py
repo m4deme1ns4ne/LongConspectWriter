@@ -3,9 +3,17 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from loguru import logger
 from tqdm import tqdm
 from transformers.generation.streamers import BaseStreamer
-from src.bad_words import BAD_WORDS
+from src.configs.bad_words import BAD_WORDS
 import yaml
 from os import PathLike
+from src.configs.ai_configs import (
+    AppLLMConfig,
+    AppSTTConfig,
+    LLMGenConfig,
+    LLMInitConfig,
+    STTGenConfig,
+    STTInitConfig,
+)
 
 
 class TextsSplitter:
@@ -98,3 +106,35 @@ class LoadPrompts:
     def load_prompts(file_path: str | PathLike) -> dict[str, dict[str, str]]:
         with open(file_path, "r", encoding="utf-8") as file:
             return yaml.safe_load(file)
+
+
+
+def load_pipeline_configs(yaml_path):
+    with open(yaml_path, "r", encoding="utf-8") as file:
+        config = yaml.safe_load(file)
+
+    stt_init_config = STTInitConfig(**config["stt_init_config"])
+    stt_gen_config = STTGenConfig(**config["stt_gen_config"])
+    stt_app_config = AppSTTConfig(**config["stt_app_config"])
+
+    drafter_init = LLMInitConfig(**config["drafter_init_config"])
+    drafter_gen = LLMGenConfig(**config["drafter_gen_config"])
+    drafter_app = AppLLMConfig(**config["drafter_app_config"])
+
+    synth_init = LLMInitConfig(**config["synthesizer_init_config"])
+    synth_gen = LLMGenConfig(**config["synthesizer_gen_config"])
+    synth_app = AppLLMConfig(**config["synthesizer_app_config"])
+
+    
+
+    return (
+        stt_init_config,
+        stt_gen_config,
+        stt_app_config,
+        drafter_init,
+        drafter_gen,
+        drafter_app,
+        synth_init,
+        synth_gen,
+        synth_app,
+    )

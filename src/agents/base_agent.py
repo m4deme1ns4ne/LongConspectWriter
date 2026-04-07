@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from loguru import logger
-from src.core.v_ram_manager import VRamCleaner
+from src.core.vram_manager import VRamCleaner
 
 
 class BaseAgent(ABC):
@@ -31,10 +31,6 @@ class BaseLLMAgent(BaseAgent):
 
     @abstractmethod
     def _build_prompt(self) -> str:
-        pass
-
-    @abstractmethod
-    def _load_quant_config(self) -> object:
         pass
 
 

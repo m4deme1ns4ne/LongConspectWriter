@@ -45,25 +45,3 @@ class VRamCleaner:
             logger.debug(f"[{owner}] VRAM очищена: {before} -> {after}")
         except Exception:
             logger.exception(f"[{owner}] Не удалось корректно очистить VRAM.")
-
-
-# def decorator_v_ram_cleaner(func: Callable[..., object]) -> Callable[..., object]:
-#     @functools.wraps(func)
-#     def wrapper(*args: object, **kwargs: object) -> object:
-#         name = func.__qualname__
-#         start = time.perf_counter()
-
-#         try:
-#             result = func(*args, **kwargs)
-#         except Exception:
-#             elapsed = time.perf_counter() - start
-#             logger.exception(f"[{name}] Упал через {elapsed:.1f} сек.")
-#             raise
-#         else:
-#             elapsed = time.perf_counter() - start
-#             logger.success(f"[{name}] Завершен за {elapsed:.1f} сек.")
-#             return result
-#         finally:
-#             _VRamCleaner.empty_vram(caller_name=name)
-
-#     return wrapper

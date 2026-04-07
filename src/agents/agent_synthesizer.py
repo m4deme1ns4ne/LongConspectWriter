@@ -5,18 +5,18 @@ import time
 import sys
 
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from loguru import logger
 from transformers.generation.streamers import BaseStreamer
-from src.core.base_agent import BaseLLMAgent
-from src.utils import (
+from src.agents.base_agent import BaseLLMAgent
+from src.core.utils import (
     TqdmTokenStreamer,
     log_retry_attempt,
     LoadPrompts,
     bad_words_id_generate,
 )
 from tenacity import retry, stop_after_attempt, wait_fixed
-from src.ai_configs import AppLLMConfig, LLMGenConfig, LLMInitConfig
+from src.configs.ai_configs import AppLLMConfig, LLMGenConfig, LLMInitConfig
 from dataclasses import asdict
 
 
@@ -35,10 +35,7 @@ class AgentSynthesizer(BaseLLMAgent):
         )
 
         logger.info(f"Загрузка {self._init_config.pretrained_model_name_or_path} в память...")
-        self.model = AutoModelForCausalLM.from_pretrained(
-            **asdict(self._init_config),
-            quantization_config=self._load_quant_config(),
-        )
+        self.model = AutoModelForCausalLM.from_pretrained(**asdict(self._init_config))
         logger.info(f"Модель {self._init_config.pretrained_model_name_or_path} загружена.")
 
         logger.info(f"Загрузка токенайзера для {self._init_config.pretrained_model_name_or_path} в память...")
@@ -49,14 +46,6 @@ class AgentSynthesizer(BaseLLMAgent):
         self.system_prompt, self.user_template = self._load_prompts()
         self.bad_words_ids = bad_words_id_generate(self.tokenizer)
 
-    def _load_quant_config(self) -> BitsAndBytesConfig:
-        quant_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=self._init_config.torch_dtype,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_use_double_quant=True,
-        )
-        return quant_config
 
     def _load_prompts(self) -> tuple[str]:
         system_prompt = self.prompts[self._app_config.agent_name]["system_prompt"]

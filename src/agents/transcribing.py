@@ -5,8 +5,8 @@ from os import PathLike
 from faster_whisper import WhisperModel
 from loguru import logger
 from tqdm import tqdm
-from src.core.base_agent import BaseSTTAgent
-from src.ai_configs import AppSTTConfig, STTGenConfig, STTInitConfig
+from src.agents.base_agent import BaseSTTAgent
+from src.configs.ai_configs import AppSTTConfig, STTGenConfig, STTInitConfig
 from dataclasses import asdict
 
 

@@ -7,16 +7,16 @@ import os
 import sys
 from os import PathLike
 import torch
-from src.utils import (
+from src.core.utils import (
     TqdmTokenStreamer,
     TextsSplitter,
     log_retry_attempt,
     LoadPrompts,
     bad_words_id_generate,
 )
-from src.core.base_agent import BaseLLMAgent
+from src.agents.base_agent import BaseLLMAgent
 from tenacity import retry, stop_after_attempt, wait_fixed
-from src.ai_configs import AppLLMConfig, LLMGenConfig, LLMInitConfig
+from src.configs.ai_configs import AppLLMConfig, LLMGenConfig, LLMInitConfig
 from dataclasses import asdict
 
 
@@ -30,15 +30,13 @@ class AgentDrafter(BaseLLMAgent):
         self._init_config = init_config
         self._gen_config = gen_config
         self._app_config = app_config
+
         logger.info(
             f"Инициализация агента Drafter (Модель: {self._init_config.pretrained_model_name_or_path}, Устройство: {self._init_config.device_map})"
         )
 
         logger.info(f"Загрузка {self._init_config.pretrained_model_name_or_path} в память...")
-        self.model = AutoModelForCausalLM.from_pretrained(
-            **asdict(self._init_config),
-            quantization_config=self._load_quant_config(),
-        )
+        self.model = AutoModelForCausalLM.from_pretrained(**asdict(self._init_config))
         logger.info(f"Модель {self._init_config.pretrained_model_name_or_path} загружена.")
 
         logger.info(f"Загрузка токенайзера для {self._init_config.pretrained_model_name_or_path} в память...")
@@ -55,14 +53,6 @@ class AgentDrafter(BaseLLMAgent):
             [self.negative_prompt], return_tensors="pt"
         ).to(self.model.device)
 
-    def _load_quant_config(self) -> BitsAndBytesConfig:
-        quant_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=self._init_config.torch_dtype,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_use_double_quant=True,
-        )
-        return quant_config
 
     def _load_prompts(self) -> tuple[str, str, str]:
         system_prompt = self.prompts[self._app_config.agent_name]["system_prompt"]
@@ -125,7 +115,6 @@ class AgentDrafter(BaseLLMAgent):
             f"Общая длина транскрибации: {len(transcrib)} символов или {token_count} токенов."
         )
 
-        # 2. Нарезка на чанки
         transcrib_chunks = TextsSplitter.split_text(
             text=transcrib, model_name=self._init_config.pretrained_model_name_or_path
         )

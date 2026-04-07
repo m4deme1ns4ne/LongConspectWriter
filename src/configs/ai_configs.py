@@ -52,6 +52,7 @@ class LLMInitConfig:
     device_map: dict[str, int] | str | None = None
     trust_remote_code: bool = False
     attn_implementation: str | None = None
+    quantization_config: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
         if self.device_map is None:
@@ -61,6 +62,9 @@ class LLMInitConfig:
             self.torch_dtype = (
                 torch.bfloat16 if torch.cuda.is_available() else torch.float32
             )
+        
+        if isinstance(self.quantization_config, dict):
+            self.quantization_config["bnb_4bit_compute_dtype"] = self.torch_dtype
 
 
 

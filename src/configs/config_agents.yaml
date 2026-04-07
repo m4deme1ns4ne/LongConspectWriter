@@ -1,3 +1,7 @@
+# STT-Agent
+# ==================
+
+
 stt_init_config:
   model_size_or_path: "large-v3-turbo"
   device: null
@@ -18,12 +22,22 @@ stt_gen_config:
 stt_app_config:
   output_dir: "data/example-transcrib"
 
+
+# Drafter-Agent
+# ==================
+
 drafter_init_config:
   pretrained_model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
   torch_dtype: null
   device_map: null
   trust_remote_code: false
   attn_implementation: "sdpa"
+  quantization_config:
+    load_in_4bit: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_compute_dtype: null
+
 
 drafter_gen_config:
   max_new_tokens: 500
@@ -35,15 +49,26 @@ drafter_gen_config:
 
 drafter_app_config:
   agent_name: "drafter"
-  prompt_path: "src/core/prompts.yaml"
+  prompt_path: "src/configs/prompts.yaml"
   output_dir: "data/example-mini-conspect"
+
+
+# Syntizer-Agent
+# ==================
+
 
 synthesizer_init_config:
   pretrained_model_name_or_path: "THUDM/LongWriter-llama3.1-8b"
   torch_dtype: null
   device_map: null
   trust_remote_code: true
-  attn_implementation: null
+  attn_implementation: "sdpa"
+  quantization_config:
+    load_in_4bit: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_compute_dtype: null
+
 
 synthesizer_gen_config:
   max_new_tokens: 4096
@@ -54,5 +79,37 @@ synthesizer_gen_config:
 
 synthesizer_app_config:
   agent_name: "synthesizer"
-  prompt_path: "src/core/prompts.yaml"
+  prompt_path: "src/configs/prompts.yaml"
   output_dir: "data/example-conspect"
+
+
+# Planner-Agent
+# ==================
+
+
+planner_init_config:
+  pretrained_model_name_or_path: "Qwen/Qwen2.5-1.5B-Instruct"
+  torch_dtype: null
+  device_map: null
+  trust_remote_code: true
+  attn_implementation: "sdpa"
+  quantization_config:
+    load_in_4bit: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_compute_dtype: null
+
+planner_gen_config:
+  max_new_tokens: 100
+  repetition_penalty: 1.05
+  temperature: 0.1
+  top_p: 0.9
+  do_sample: true
+
+planner_app_config:
+  agent_name: "synthesizer"
+  prompt_path: "src/configs/prompts.yaml"
+  output_dir: "data/example-plan"
+
+
+# ==================

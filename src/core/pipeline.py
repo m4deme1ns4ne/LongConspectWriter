@@ -1,6 +1,6 @@
-from src.core.transcribing import FasterWhisper
-from src.core.agent_drafter import AgentDrafter
-from src.core.agent_synthesizer import AgentSynthesizer
+from src.agents.transcribing import FasterWhisper
+from src.agents.agent_drafter import AgentDrafter
+from src.agents.agent_synthesizer import AgentSynthesizer
 from loguru import logger
 import multiprocessing
 from os import PathLike
@@ -43,7 +43,7 @@ class ConspectiusPipeline:
         except Exception as e:
             result_queue.put({"status": "error", "error": str(e)})
 
-    def _call_sst(self, audio_file_path: str | PathLike) -> str:
+    def _call_stt(self, audio_file_path: str | PathLike) -> str:
 
         logger.info("Запуск STT агента в изолированном процессе...")
         # Создаем канал связи (Очередь) между основным и фоновым процессом
@@ -70,16 +70,18 @@ class ConspectiusPipeline:
                 "Процесс STT завершился, но не вернул результат. Возможно, произошло жесткое падение CTranslate2."
             )
 
-    def _call_drafter(self, path_transcrib: str | PathLike) -> str:
+    def _call_drafter(self, path_transcrib: str | PathLike) -> str | PathLike | None:
         with AgentDrafter(
             init_config=self.drafter_init_config,
             gen_config=self.drafter_gen_config,
             app_config=self.drafter_app_config,
         ) as drafter:
             chunk_conspects_path = drafter.run(path_transcrib)
-            return chunk_conspects_path
+        if not chunk_conspects_path:
+            return None
+        return chunk_conspects_path
 
-    def _call_synthesizer(self, chunk_conspects_path: str | PathLike) -> str:
+    def _call_synthesizer(self, chunk_conspects_path: str | PathLike) -> str | PathLike:
         with AgentSynthesizer(
             init_config=self.synthesizer_init_config,
             gen_config=self.synthesizer_gen_config,
@@ -88,25 +90,15 @@ class ConspectiusPipeline:
             final_conspect_path = synthesizer.run(chunk_conspects_path)
             return final_conspect_path
 
-    def pipeline(self, audio_file_path: str | PathLike | None = None) -> str | None:
-        # Это нужно для тестирования _call_drafter и _call_synthesizer
-        # Убрать потом
-        if audio_file_path is None:
-            litle_transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Лекция 1 (-1775502794.txt"
-            # full_transcript_path = r"data\example-transcrib\large-v3-turbo-cuda-float16-Лекция 1. -1775312903.txt"
-            transcript_path = litle_transcript_path
-        else:
-            transcript_path = self._call_sst(audio_file_path)
-            logger.info(f"Получен путь для транскрибации: {transcript_path}")
+    def pipeline(self, audio_file_path: str | PathLike) -> str | None:
+        transcript_path = self._call_stt(audio_file_path)
+        logger.info(f"Получен путь для транскрибации: {transcript_path}")
 
         chunk_conspects_path = self._call_drafter(transcript_path)
+
         if not chunk_conspects_path:
             logger.warning("Drafter не вернул ни одного валидного мини-конспекта.")
-            return
-
-        # Нужно для тестирования syntizer отдельно
-        # Убрать потом
-        # chunk_conspects_path = r"data\example-mini-conspect\Qwen_Qwen2.5-7B-Instruct-large-v3-turbo-cuda-float16-Лекция 1. -1775312903.txt-1775315971.txt"
+            return None
 
         logger.info(f"Получен путь до мини-конспектов: {chunk_conspects_path}")
         final_conspect_path = self._call_synthesizer(chunk_conspects_path)
