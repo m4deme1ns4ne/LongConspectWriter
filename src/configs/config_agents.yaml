@@ -27,7 +27,7 @@ stt_app_config:
 # ==================
 
 drafter_init_config:
-  pretrained_model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
+  pretrained_model_name_or_path: "Qwen/Qwen2.5-3B-Instruct"
   torch_dtype: null
   device_map: null
   trust_remote_code: false
@@ -42,7 +42,7 @@ drafter_init_config:
 drafter_gen_config:
   max_new_tokens: 500
   repetition_penalty: 1.15
-  temperature: 0.1
+  temperature: 0.01
   top_p: 0.9
   do_sample: true
   guidance_scale: 1.5
@@ -58,7 +58,7 @@ drafter_app_config:
 
 
 synthesizer_init_config:
-  pretrained_model_name_or_path: "THUDM/LongWriter-llama3.1-8b"
+  pretrained_model_name_or_path: "Qwen/Qwen2.5-1.5B-Instruct"
   torch_dtype: null
   device_map: null
   trust_remote_code: true
@@ -83,12 +83,12 @@ synthesizer_app_config:
   output_dir: "data/example-conspect"
 
 
-# Planner-Agent
+# AgentLocalPlanner
 # ==================
 
 
-planner_init_config:
-  pretrained_model_name_or_path: "Qwen/Qwen2.5-1.5B-Instruct"
+local_planner_init_config:
+  pretrained_model_name_or_path: "Qwen/Qwen2.5-3B-Instruct"
   torch_dtype: null
   device_map: null
   trust_remote_code: true
@@ -99,17 +99,42 @@ planner_init_config:
     bnb_4bit_use_double_quant: true
     bnb_4bit_compute_dtype: null
 
-planner_gen_config:
-  max_new_tokens: 100
+local_planner_gen_config:
+  max_new_tokens: 512
+  repetition_penalty: 1.15
+  temperature: 0.1
+  top_p: 0.9
+  do_sample: true
+
+local_planner_app_config:
+  agent_name: "local_planner"
+  prompt_path: "src/configs/prompts.yaml"
+  output_dir: "data/example-plan/example-local-plan"
+
+
+# AgentGlobalPlanner
+# ==================
+
+global_planner_init_config:
+  pretrained_model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
+  torch_dtype: null
+  device_map: null
+  trust_remote_code: true
+  attn_implementation: "sdpa"
+  quantization_config:
+    load_in_4bit: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_compute_dtype: null
+
+global_planner_gen_config:
+  max_new_tokens: 1024
   repetition_penalty: 1.05
   temperature: 0.1
   top_p: 0.9
   do_sample: true
 
-planner_app_config:
-  agent_name: "synthesizer"
+global_planner_app_config:
+  agent_name: "global_planner"
   prompt_path: "src/configs/prompts.yaml"
-  output_dir: "data/example-plan"
-
-
-# ==================
+  output_dir: "data/example-plan/example-global-plan"
