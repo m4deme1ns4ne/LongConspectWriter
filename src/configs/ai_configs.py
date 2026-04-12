@@ -1,4 +1,4 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from os import PathLike
 import torch
 
@@ -8,8 +8,6 @@ class VadParametersConfig:
     min_silence_duration_ms: int = 500
     speech_pad_ms: int = 400
     threshold: float = 0.7
-
-
 
 
 @dataclass
@@ -40,6 +38,7 @@ class STTGenConfig:
         if isinstance(self.vad_parameters, dict):
             self.vad_parameters = VadParametersConfig(**self.vad_parameters)
 
+
 @dataclass
 class AppSTTConfig:
     output_dir: str | PathLike
@@ -62,10 +61,9 @@ class LLMInitConfig:
             self.torch_dtype = (
                 torch.bfloat16 if torch.cuda.is_available() else torch.float32
             )
-        
+
         if isinstance(self.quantization_config, dict):
             self.quantization_config["bnb_4bit_compute_dtype"] = self.torch_dtype
-
 
 
 @dataclass
