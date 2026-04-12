@@ -1,7 +1,7 @@
 import time
 import os
 import sys
-from os import PathLike
+from pathlib import Path
 from faster_whisper import WhisperModel
 from loguru import logger
 from tqdm import tqdm
@@ -31,7 +31,7 @@ class FasterWhisper(BaseSTTAgent):
         )
         logger.info(f"Модель {self._init_config.model_size_or_path} загружена.")
 
-    def run(self, audio_file_path: str | PathLike) -> str:
+    def run(self, audio_file_path: Path) -> str:
         """
         Транскрибирует аудиофайл в текст.
 
@@ -55,9 +55,10 @@ class FasterWhisper(BaseSTTAgent):
         logger.debug(f"Итоговое название файла: {transcrib_file_name}")
 
         logger.info(f"Начинаем обработку аудиофайла файла: {audio_file_path}...")
-        start_time = time.time()
 
-        segments, info = self.model.transcribe(audio=audio_file_path, **asdict(self._gen_config))
+        segments, info = self.model.transcribe(
+            audio=audio_file_path, **asdict(self._gen_config)
+        )
 
         if info.all_language_probs:
             logger.info(
@@ -108,10 +109,5 @@ class FasterWhisper(BaseSTTAgent):
 
                     progress = segment.end - pbar.n
                     pbar.update(progress)
-
-        end_time = time.time()
-        logger.success(
-            f"Транскрибация завершена за {end_time - start_time:.2f} секунд."
-        )
 
         return final_path

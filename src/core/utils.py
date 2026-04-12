@@ -1,24 +1,26 @@
-from transformers import AutoTokenizer
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from loguru import logger
 from tqdm import tqdm
 from transformers.generation.streamers import BaseStreamer
+from transformers import AutoTokenizer
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from src.configs.bad_words import BAD_WORDS
 import yaml
 from os import PathLike
-from src.configs.ai_configs import (
-    AppLLMConfig,
-    AppSTTConfig,
-    LLMGenConfig,
-    LLMInitConfig,
-    STTGenConfig,
-    STTInitConfig,
-)
+import functools
+import time
+from razdel import sentenize
 
 
 class TextsSplitter:
     @staticmethod
-    def split_text(text: str, model_name: str, chunk_size: int = 2000) -> list[str]:
+    def split_text_to_sentences(text: str) -> list[str]:
+        sentences = list(sentenize(text))
+        return [sentence.text for sentence in sentences]
+
+    @staticmethod
+    def split_text_to_tokens(
+        text: str, model_name: str, chunk_size: int = 2000
+    ) -> list[str]:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
             tokenizer=tokenizer,
@@ -77,19 +79,19 @@ def log_retry_attempt(retry_state):
 
 
 def bad_words_id_generate(tokenizer) -> list[list[int]]:
-    seen: set[tuple[int, ...]] = set()
-    bad_words_ids: list[list[int]] = []
+    seen = set()
+    bad_words_ids = []
 
     for word in BAD_WORDS:
         # Токенизируем строку в список int без служебных токенов
-        ids: list[int] = tokenizer.encode(word, add_special_tokens=False)
+        ids = tokenizer.encode(word, add_special_tokens=False)
 
         # Пропускаем если токенизатор вернул пустой список
         if not ids:
             continue
 
         # Преобразуем в tuple для хранения в set (list не хешируемый)
-        ids_tuple: tuple[int, ...] = tuple(ids)
+        ids_tuple = tuple(ids)
 
         # Пропускаем дубликаты
         if ids_tuple in seen:
@@ -108,33 +110,21 @@ class LoadPrompts:
             return yaml.safe_load(file)
 
 
+def log_execution_time(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time.perf_counter()
+        result = func(*args, **kwargs)
+        elapsed = time.perf_counter() - start
+        hours, rem = divmod(elapsed, 3600)
+        minutes, seconds = divmod(rem, 60)
+        logger.success(
+            f"[{func.__qualname__}] завершён за "
+            f"{int(hours)}ч {int(minutes)}м {seconds:.1f}с"
+        )
+        return result
 
-def load_pipeline_configs(yaml_path):
-    with open(yaml_path, "r", encoding="utf-8") as file:
-        config = yaml.safe_load(file)
+    return wrapper
 
-    stt_init_config = STTInitConfig(**config["stt_init_config"])
-    stt_gen_config = STTGenConfig(**config["stt_gen_config"])
-    stt_app_config = AppSTTConfig(**config["stt_app_config"])
 
-    drafter_init = LLMInitConfig(**config["drafter_init_config"])
-    drafter_gen = LLMGenConfig(**config["drafter_gen_config"])
-    drafter_app = AppLLMConfig(**config["drafter_app_config"])
-
-    synth_init = LLMInitConfig(**config["synthesizer_init_config"])
-    synth_gen = LLMGenConfig(**config["synthesizer_gen_config"])
-    synth_app = AppLLMConfig(**config["synthesizer_app_config"])
-
-    
-
-    return (
-        stt_init_config,
-        stt_gen_config,
-        stt_app_config,
-        drafter_init,
-        drafter_gen,
-        drafter_app,
-        synth_init,
-        synth_gen,
-        synth_app,
-    )
+SEPARATOR = "\n\n------------------------\n\n"

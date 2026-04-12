@@ -15,10 +15,7 @@ class VRamUsage:
             allocated = torch.cuda.memory_allocated(device_index) / (1024**2)
             reserved = torch.cuda.memory_reserved(device_index) / (1024**2)
             total = props.total_memory / (1024**2)
-            return (
-                f"allocated={allocated:.0f} MB, "
-                f"reserved={reserved:.0f} MB / {total:.0f} MB"
-            )
+            return allocated, reserved, total
         except Exception as exc:
             return f"GPU (usage unavailable: {exc})"
 
@@ -34,14 +31,16 @@ class VRamCleaner:
             return
 
         try:
-            before = VRamUsage.get_vram_usage()
+            before_allocated, before_reserved, before_total = VRamUsage.get_vram_usage()
 
             if torch.cuda.is_initialized():
                 torch.cuda.synchronize()
 
             torch.cuda.empty_cache()
 
-            after = VRamUsage.get_vram_usage()
-            logger.debug(f"[{owner}] VRAM очищена: {before} -> {after}")
+            after_allocated, after_reserved, after_total = VRamUsage.get_vram_usage()
+            logger.debug(
+                f"[{owner}] VRAM очищена: allocated={before_allocated:.0f} MB, reserved={before_reserved:.0f} MB / {before_total:.0f} MB -> allocated={after_allocated:.0f} MB, reserved={after_reserved:.0f} MB / {after_total:.0f} MB"
+            )
         except Exception:
             logger.exception(f"[{owner}] Не удалось корректно очистить VRAM.")
