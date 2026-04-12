@@ -1,19 +1,31 @@
 from sentence_transformers import SentenceTransformer
 from sklearn.cluster import AgglomerativeClustering
-from sklearn.preprocessing import normalize
-from pprint import pprint
 from src.core.utils import TextsSplitter
 from loguru import logger
 import numpy as np
-import umap
-import hdbscan
+import time
+import os
+from pathlib import Path
+from src.core.utils import SEPARATOR
+import json
+from sentence_transformers import util
+import torch
+from src.agents.base_agent import Trackable
 
 
-class SemanticLocalClusterizer:
-    def __init__(self, model):
-        self.model = SentenceTransformer(model)
+class BaseClusterizer(Trackable):
+    pass
 
-    def build_local_clusters(self, transcrib):
+
+class SemanticLocalClusterizer(BaseClusterizer):
+    def __init__(self, model_name):
+        self.model_name = model_name
+        self.model = SentenceTransformer(model_name)
+
+    def run(self, path):
+        with open(path, "r", encoding="utf-8") as file:
+            transcrib = file.read()
+
         sentences = TextsSplitter.split_text_to_sentences(transcrib)
         logger.info(f"Всего предложений: {len(sentences)}")
 
@@ -32,7 +44,27 @@ class SemanticLocalClusterizer:
 
         clusters = self._format_cluster_output(sentences, labels)
 
-        return clusters
+        monolith_draft = f"\n\n{SEPARATOR}\n\n".join(clusters)
+
+        safe_model_name = self.model_name.replace("/", "_")
+
+        pure_transcrib_file_name = os.path.basename(path)
+
+        timestamp = int(time.time())
+        out_filepath = os.path.join(
+            Path("data/example-clusters/example-local-clusters"),
+            f"{safe_model_name}-{pure_transcrib_file_name}-{timestamp}.txt",
+        )
+
+        os.makedirs(os.path.dirname(out_filepath), exist_ok=True)
+        with open(out_filepath, "w", encoding="utf-8") as f:
+            f.write(monolith_draft)
+
+        logger.success(f"Локальные кластеры сохранены в {out_filepath}")
+        logger.info(f"Локальных кластеров: {len(clusters)}")
+        logger.debug(f"Type local clusters: {type(clusters)}")
+
+        return out_filepath
 
     def _format_cluster_output(self, sentences, labels):
         grouped_data = {}
@@ -50,81 +82,73 @@ class SemanticLocalClusterizer:
         for cluster in grouped_data:
             new_grouped_data.append(cluster[1])
 
+        new_grouped_data = [" ".join(_["text"]) for _ in new_grouped_data]
+
         return new_grouped_data
-    
 
-class SemanticGlobalClusterizer:
-    def __init__(self, model):
-        self.model = SentenceTransformer(model)
 
-    def build_global_clusters(self, local_clusters):
+class SemanticGlobalClusterizer(BaseClusterizer):
+    def __init__(self, model_name):
+        self.model_name = model_name
+        self.model = SentenceTransformer(model_name)
 
-        formatted_texts = [f"passage: {text}" for text in local_clusters]
-        embeddings = self.model.encode(formatted_texts, show_progress_bar=True, normalize_embeddings=False)
+    def run(self, plan_path, local_clusters_path):
 
-        normalized_embeddings = normalize(embeddings, norm="l2")
+        with open(plan_path, "r", encoding="utf-8") as file:
+            global_plan = json.load(file)
 
-        umap_model = umap.UMAP(
-            n_neighbors=min(15, len(formatted_texts) - 1), 
-            n_components=10, # Сжимаем 768 -> 10 измерений
-            metric="euclidean",
-            random_state=42 # Важно для воспроизводимости пайплайна
+        with open(local_clusters_path, "r", encoding="utf-8") as file:
+            local_clusters = file.read()
+
+        local_clusters = [
+            chunk.strip() for chunk in local_clusters.split(SEPARATOR) if chunk.strip()
+        ]
+
+        chapters = global_plan["chapters"]
+        chapter_titles = [ch["chapter_title"] for ch in chapters]
+
+        global_plan_embeddings = self.model.encode(
+            [
+                f"query: {dict_chapter['chapter_title']}. {dict_chapter['description']}"
+                for dict_chapter in chapters
+            ]
+        )
+        local_clusters_embeddings = self.model.encode(
+            [f"passage: {clusters}" for clusters in local_clusters]
         )
 
-        reduced_embeddings = umap_model.fit_transform(normalized_embeddings)
+        global_clusters = {key: [] for key in chapter_titles}
+        scores = util.cos_sim(local_clusters_embeddings, global_plan_embeddings)
 
-        clusterer = hdbscan.HDBSCAN(
-            min_cluster_size=10,
-            min_samples=10,
-            metric="euclidean",
-            cluster_selection_epsilon=0.1, 
-            cluster_selection_method="eom" # "eom" (Excess of Mass) лучше для поиска крупных тем
+        max_scores_tensor, assignments_tensor = torch.max(scores, dim=1)
+        max_scores_tensor, assignments_tensor = (
+            max_scores_tensor.tolist(),
+            assignments_tensor.tolist(),
         )
 
-        labels = clusterer.fit_predict(reduced_embeddings)
+        for chunk_idx, chapter_idx in enumerate(assignments_tensor):
+            global_clusters[chapter_titles[chapter_idx]].append(
+                local_clusters[chunk_idx]
+            )
 
-        # Извлечение результатов
-        topics = {}
-        noise_count = 0
+        global_clusters = {
+            key: value for key, value in global_clusters.items() if value
+        }
 
-        for idx, label in enumerate(labels):
-            if label == -1:
-                noise_count += 1
-                continue # Игнорируем семантический мусор лектора
-                
-            if label not in topics:
-                topics[label] = []
-                
-            topics[label].append(local_clusters[idx])
+        safe_model_name = self.model_name.replace("/", "_")
 
-        topics = [value for keys, value in topics.items()]
+        timestamp = int(time.time())
+        out_filepath = os.path.join(
+            Path("data/example-clusters/example-global-clusters"),
+            f"{safe_model_name}-{timestamp}.json",
+        )
 
-        return topics
+        os.makedirs(os.path.dirname(out_filepath), exist_ok=True)
+        with open(out_filepath, "w", encoding="utf-8") as file:
+            json.dump(global_clusters, file, ensure_ascii=False, indent=4)
 
+        logger.info(f"Глобальных кластеров: {len(global_clusters)}")
+        logger.debug(f"Type local clusters: {type(global_clusters)}")
+        logger.success(f"Глобальные кластеры сохранены в {out_filepath}")
 
-
-with open(
-    "data/example-transcrib/large-v3-turbo-cuda-float16-Лекция 1. -1775312903.txt",
-    "r",
-    encoding="utf-8",
-) as file:
-    transcrib = file.read()
-
-
-model_local_clustering = SemanticLocalClusterizer("cointegrated/rubert-tiny2")
-local_clusters = model_local_clustering.build_local_clusters(transcrib)
-
-logger.success(f"Локальных кластеров: {len(local_clusters)}")
-logger.debug(f"Type local clusters: {type(local_clusters)}")
-
-local_clusters = [" ".join(_["text"]) for _ in local_clusters]
-
-model_global_clustering = SemanticGlobalClusterizer("intfloat/multilingual-e5-base")
-global_clusters = model_global_clustering.build_global_clusters(local_clusters)
-
-logger.success(f"Глобальных кластеров: {len(global_clusters)}")
-logger.debug(f"Type global clusters: {type(global_clusters)}")
-
-pprint(
-    global_clusters
-)
+        return out_filepath

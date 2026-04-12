@@ -1,94 +1,153 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from transformers.generation.streamers import BaseStreamer
 from loguru import logger
 import time
 from tqdm import tqdm
 import os
 import sys
-from os import PathLike
-import torch
-from src.core.utils import (
-    TqdmTokenStreamer,
-    TextsSplitter,
-    log_retry_attempt,
-    LoadPrompts,
-    bad_words_id_generate,
-)
-from src.agents.base_agent import BaseLLMAgent
-from tenacity import retry, stop_after_attempt, wait_fixed
-from src.configs.ai_configs import AppLLMConfig, LLMGenConfig, LLMInitConfig
-from dataclasses import asdict
+from src.core.utils import TqdmTokenStreamer
+from src.agents.base_agent import BaseTransformersAgent
+from pathlib import Path
+from src.core.utils import SEPARATOR
 
 
-class AgentPlanner(BaseLLMAgent):
-    def __init__(
-        self,
-        init_config: LLMInitConfig,
-        gen_config: LLMGenConfig,
-        app_config: AppLLMConfig,
-    ) -> None:
-        self._init_config = init_config
-        self._gen_config = gen_config
-        self._app_config = app_config
+class AgentLocalPlanner(BaseTransformersAgent):
+    def __init__(self, init_config, gen_config, app_config):
+        super().__init__(init_config, gen_config, app_config)
+
+    def _chunking(self, text: str, max_tokens: int):
+        local_clusters = text.split(f"\n\n{SEPARATOR}\n\n")
+
+        final_batches = []
+        current_batch = []
+        current_tokens = 0
+
+        for chunk in local_clusters:
+            tokenized_chunk = self.tokenizer(chunk, add_special_tokens=False)[
+                "input_ids"
+            ]
+            len_chunk_tokens = len(tokenized_chunk)
+
+            if len_chunk_tokens + current_tokens > max_tokens:
+                current_batch = "\n\n------------------------\n\n".join(current_batch)
+                final_batches.append(current_batch)
+
+                current_batch = [chunk]
+                current_tokens = len_chunk_tokens
+
+            else:
+                current_batch.append(chunk)
+                current_tokens += len_chunk_tokens
+
+        if current_batch:
+            current_batch = "\n\n------------------------\n\n".join(current_batch)
+            final_batches.append(current_batch)
+
+        return final_batches
+
+    def run(self, path: Path) -> str:
+        with open(path, "r", encoding="utf-8") as file:
+            local_clusters = file.read()
+
+        max_tokens = 2000
+        chunking_local_clusters = self._chunking(local_clusters, max_tokens)
         logger.info(
-            f"Инициализация агента Drafter (Модель: {self._init_config.pretrained_model_name_or_path}, Устройство: {self._init_config.device_map})"
+            f"Локальных кластеров разбитых на {max_tokens} токенов получилось: {len(chunking_local_clusters)}"
         )
 
-        logger.info(f"Загрузка {self._init_config.pretrained_model_name_or_path} в память...")
-        self.model = AutoModelForCausalLM.from_pretrained(**asdict(self._init_config))
-        logger.info(f"Модель {self._init_config.pretrained_model_name_or_path} загружена.")
+        final_drafts = []
+        ignored_chunks = 0
 
-        logger.info(f"Загрузка токенайзера для {self._init_config.pretrained_model_name_or_path} в память...")
-        self.tokenizer = AutoTokenizer.from_pretrained(self._init_config.pretrained_model_name_or_path)
-        logger.info(f"Токенайзер для {self._init_config.pretrained_model_name_or_path} загружен.")
+        with tqdm(
+            total=len(chunking_local_clusters),
+            unit="чанк",
+            desc="Локальные кластеры",
+            colour="green",
+            position=0,
+            file=sys.stdout,
+            dynamic_ncols=True,
+        ) as pbar:
+            for chunk in chunking_local_clusters:
+                with tqdm(
+                    total=self._gen_config.max_new_tokens,
+                    desc="Генерация токенов",
+                    unit="токен",
+                    colour="blue",
+                    leave=False,
+                    position=1,
+                    file=sys.stdout,
+                    dynamic_ncols=True,
+                ) as token_pbar:
+                    streamer = TqdmTokenStreamer(token_pbar)
+                    response = self._generate(
+                        prompt=self._build_prompt(text=chunk),
+                        streamer=streamer,
+                    )
+                pbar.update(1)
+                if "[NO_TOPICS]" in response:
+                    ignored_chunks += 1
+                    continue
 
-        self.prompts = LoadPrompts.load_prompts(self._app_config.prompt_path)
-        self.system_prompt, self.user_template = (
-            self._load_prompts()
+                final_drafts.append(response)
+
+        logger.info("Генерация локальных заголовков завершена.")
+
+        final_drafts = f"\n\n{SEPARATOR}\n\n".join(final_drafts)
+
+        timestamp = int(time.time())
+        safe_model_name = self._init_config.pretrained_model_name_or_path.replace(
+            "/", "_"
+        )
+        pure_draft_name = os.path.basename(path)
+        out_path = os.path.join(
+            self._app_config.output_dir,
+            f"{safe_model_name}-{pure_draft_name}-{timestamp}.md",
         )
 
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "x", encoding="utf-8") as f:
+            f.write(final_drafts)
+        logger.success(f"Локальные заголовки сохранены: {out_path}")
+        return out_path
 
-    def _load_prompts(self) -> tuple:
-        pass
 
-    def _build_prompt(self) -> str:
-        pass
+class AgentGlobalPlanner(BaseTransformersAgent):
+    def __init__(self, init_config, gen_config, app_config):
+        super().__init__(init_config, gen_config, app_config)
 
-    def _load_quant_config(self) -> object:
-        pass
+    def run(self, path: Path) -> str:
+        with open(path, "r", encoding="utf-8") as file:
+            local_plan = file.read()
 
-    def _generate(self) -> str:
-        pass
+        local_plan = local_plan.replace(f"\n\n{SEPARATOR}\n\n", "\n")
 
-model_name = "Qwen/Qwen2.5-1.5B-Instruct"
+        with tqdm(
+            total=self._gen_config.max_new_tokens,
+            desc="Генерация токенов",
+            unit="токен",
+            colour="blue",
+            leave=False,
+            position=1,
+            file=sys.stdout,
+            dynamic_ncols=True,
+        ) as token_pbar:
+            streamer = TqdmTokenStreamer(token_pbar)
+            response = self._generate(
+                prompt=self._build_prompt(text=local_plan),
+                streamer=streamer,
+            )
+        logger.info("Генерация глобальных заголовков завершена.")
 
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    torch_dtype="auto",
-    device_map="auto"
-)
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+        timestamp = int(time.time())
+        safe_model_name = self._init_config.pretrained_model_name_or_path.replace(
+            "/", "_"
+        )
+        pure_draft_name = os.path.basename(path)
+        out_path = os.path.join(
+            self._app_config.output_dir,
+            f"{safe_model_name}-{pure_draft_name}-{timestamp}.json",
+        )
 
-prompt = "Give me a short introduction to large language model."
-messages = [
-    {"role": "system", "content": "You are Qwen, created by Alibaba Cloud. You are a helpful assistant."},
-    {"role": "user", "content": prompt}
-]
-text = tokenizer.apply_chat_template(
-    messages,
-    tokenize=False,
-    add_generation_prompt=True
-)
-model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
-
-generated_ids = model.generate(
-    **model_inputs,
-    max_new_tokens=512
-)
-generated_ids = [
-    output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
-]
-
-response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
-print(response)
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "x", encoding="utf-8") as f:
+            f.write(response)
+        logger.success(f"Глобальные заголовки сохранены: {out_path}")
+        return out_path
