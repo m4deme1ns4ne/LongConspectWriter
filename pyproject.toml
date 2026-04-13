@@ -18,6 +18,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "pyyaml>=6.0.3",
     "razdel>=0.5.0",
+    "ruff>=0.15.10",
     "sentence-transformers>=5.3.0",
     "tenacity>=9.1.4",
     "torch>=2.5.1",
