@@ -1,4 +1,4 @@
-# Conspectius Engine
+# LongConspectWriter
 
 [English version](README.md)
 
@@ -187,7 +187,7 @@ data/
 Плейсхолдер под будущую статью / препринт.
 
 ```bibtex
-@misc{conspectius_engine,
+@misc{long_conspect_writer,
   title  = {LongConspectWriter},
   author = {TODO},
   year   = {2026},
