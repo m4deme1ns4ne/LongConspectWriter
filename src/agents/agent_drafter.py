@@ -129,12 +129,12 @@ class AgentDrafter(BaseTransformersAgent):
         current_token_count = len(
             self.tokenizer.encode(final_drafts, add_special_tokens=False)
         )
-        defference_tokens = (
+        difference_tokens = (
             token_count - current_token_count
             if token_count > current_token_count
             else 0
         )
-        defference_sentences = (
+        difference_sentences = (
             len_original_sentences - len_final_drafts
             if len_original_sentences > len_final_drafts
             else 0
@@ -142,7 +142,7 @@ class AgentDrafter(BaseTransformersAgent):
 
         logger.info(f"Кол-во предложений после чистки: {len_final_drafts}.")
         logger.info(f"Кол-во токенов после чистки: {current_token_count}.")
-        logger.info(f"Экономия в предложениях: {defference_sentences}.")
-        logger.info(f"Экономия в токенах: {defference_tokens}.")
+        logger.info(f"Экономия в предложениях: {difference_sentences}.")
+        logger.info(f"Экономия в токенах: {difference_tokens}.")
 
         return out_filepath

@@ -1,62 +1,43 @@
 # Conspectius Engine
 
-Research MVP for turning long lecture audio into structured academic notes.
+[Русская версия](README.ru.md)
 
-The project is focused on a simple idea: instead of sending a noisy long transcript into one model and hoping for the best, break the task into several smaller stages that are easier to run locally and easier to improve independently.
+Research MVP for generating structured academic notes from long lecture audio.
 
-At the moment, the repository already has a working end-to-end path from audio to generated notes. Some modules are still experimental and intentionally kept outside the main pipeline while the core flow is being tested.
+The repository focuses on a simple idea: long, noisy lecture transcripts are easier to process as a multi-stage local pipeline than as a single giant prompt. Instead of asking one model to do everything at once, the project splits the task into transcription, cleaning, clustering, planning, and synthesis.
 
-<!-- TODO: add banner / teaser image -->
-<!-- Example:
-![Conspectius Demo](docs/images/teaser.png)
--->
+## Current State
 
-## What It Does
+This is a working research MVP, not a polished product.
 
-- Transcribes lecture audio with `faster-whisper`
-- Splits transcript into local semantic blocks
-- Builds a lightweight chapter plan
-- Matches local blocks to global topics
-- Generates a structured long-form conspect with an LLM
+What already works:
 
-Current target domain:
+- `STT` with `faster-whisper`
+- transcript cleaning with `Drafter`
+- local semantic clustering
+- local and global planning
+- topic-to-cluster matching
+- final conspect generation with `Synthesizer`
 
-- Russian-language lectures
-- STEM / technical subjects
-- Long-form academic speech
-- Local inference with limited VRAM
+What is still experimental:
 
-## Current Status
-
-This repository is a **working research MVP**, not a polished product.
-
-### In the main pipeline now
-
-- `STT`
-- `Local clustering`
-- `Local planner`
-- `Global planner`
-- `Global clustering`
-- `Synthesizer`
-
-### Experimental / not yet in the final flow
-
-- `Drafter`
 - `SmartCompressor`
-- specialist routing / domain normalization
-- visual generation / export pipeline
+- hallucination validation
+- visualization/export pipeline
+- stronger evaluation and automated tests
 
-This split is intentional: the stable path is used to validate the overall concept first, while the heavier modules are iterated separately.
+## Current Pipeline
 
-## Pipeline
+Main `all` flow:
 
-### Current working flow
+`audio -> STT -> Drafter -> Local Clustering -> Local Planner -> Global Planner -> Global Clustering -> Synthesizer`
 
-`audio -> STT -> local clustering -> planning -> global clustering -> synthesizer`
+The current version is optimized for:
 
-### Intended full flow
-
-`audio -> STT -> local clustering -> drafter / compression -> planning -> global clustering -> synthesizer -> export`
+- Russian-language lecture audio
+- STEM / technical subjects
+- local inference with limited VRAM
+- inspectable intermediate artifacts saved to disk
 
 ## Quick Start
 
@@ -64,20 +45,12 @@ This split is intentional: the stable path is used to validate the overall conce
 
 - Python `3.12+`
 - CUDA GPU recommended
-- `uv` recommended for environment setup
+- `uv` recommended
 
 ### Install
 
 ```bash
 uv sync
-```
-
-### Environment
-
-Create `.env` if needed:
-
-```env
-# add your local settings here
 ```
 
 ### Run the full pipeline
@@ -90,7 +63,8 @@ uv run python __main__.py --action all --path_to_file "data/example-audio/your_l
 
 ```bash
 uv run python __main__.py --action stt --path_to_file "data/example-audio/your_lecture.mp3"
-uv run python __main__.py --action local_clustering --path_to_file "data/example-transcrib/your_transcript.txt"
+uv run python __main__.py --action drafter --path_to_file "data/example-transcrib/your_transcript.txt"
+uv run python __main__.py --action local_clustering --path_to_file "data/example-mini-conspect/your_cleaned_transcript.txt"
 uv run python __main__.py --action planner --path_to_file "data/example-clusters/example-local-clusters/your_clusters.txt"
 uv run python __main__.py --action global_clustering --global_plan_path "data/example-plan/example-global-plan/plan.json" --local_clusters_path "data/example-clusters/example-local-clusters/your_clusters.txt"
 uv run python __main__.py --action synthesizer --path_to_file "data/example-clusters/example-global-clusters/global_clusters.json"
@@ -111,75 +85,73 @@ uv run python __main__.py --action synthesizer --path_to_file "data/example-clus
 
 ## Configuration
 
-Main configs live in:
+Main config files:
 
-- `src/configs/config_agents.yaml`
+- `src/configs/config.yaml`
 - `src/configs/prompts.yaml`
+- `src/configs/bad_words.py`
 
-From there you can change:
+You can change:
 
-- model names
+- model choices
 - generation parameters
 - prompt templates
 - output directories
-- STT settings
+- STT options
+- blocked phrases for generation cleanup
 
 ## Project Structure
 
 ```text
 src/
-  agents/      # LLM agents: drafter, planner, synthesizer
-  core/        # pipeline, STT, clustering, compression, VRAM helpers
-  configs/     # YAML configs and prompts
+  agents/      # Drafter, Planner, Synthesizer
+  core/        # base abstractions, pipeline, STT, clustering, compression, utils
+  configs/     # model configs, prompts, bad words
   tests/       # placeholders for smoke / unit / e2e tests
 
 data/
   example-audio/
   example-transcrib/
+  example-mini-conspect/
   example-clusters/
   example-plan/
   example-conspect/
-  example-mini-conspect/
 ```
 
 ## Outputs
 
-The pipeline currently writes intermediate artifacts to disk so each stage can be inspected separately:
+The pipeline stores intermediate artifacts on disk so each step can be inspected separately:
 
-- transcripts
+- raw transcripts
+- cleaned transcripts
 - local clusters
 - local plans
 - global plans
 - global clusters
-- generated conspects
+- final generated conspects
 
-This makes debugging much easier and is useful for research iteration.
+This is intentional and useful for debugging, iteration, and future experiments.
 
 ## Demo
 
 Placeholder for:
 
-- pipeline screenshot
-- sample generated conspect
-- before / after examples
-- short demo gif
+- pipeline diagram
+- sample output screenshots
+- before / after cleaning examples
+- demo gif or short video
 
 <!-- TODO: add demo media -->
-<!--
-![Pipeline](docs/images/pipeline.png)
-![Sample Output](docs/images/sample-output.png)
--->
 
 ## Example Results
 
 Placeholder for:
 
-- one short input lecture example
-- one transcript fragment
-- one planning example
-- one final conspect excerpt
-
-This section is intentionally left open for future updates.
+- short lecture sample
+- transcript fragment
+- cleaned transcript fragment
+- generated plan
+- final conspect excerpt
 
 ## Tests
 
@@ -187,40 +159,28 @@ Test section placeholder.
 
 Planned coverage:
 
-- [ ] smoke tests
-- [ ] unit tests for core utilities
-- [ ] integration tests for pipeline stages
-- [ ] end-to-end run on a short sample
-
-Suggested future commands:
-
-```bash
-uv run pytest
-```
+- smoke tests
+- unit tests for utilities
+- integration tests for pipeline stages
+- short end-to-end sample run
 
 ## Roadmap
 
 - stabilize the current end-to-end path
-- reconnect `Drafter` into the main flow
-- implement `SmartCompressor`
+- finish `SmartCompressor`
 - improve math-aware post-processing
+- add hallucination checks
 - add export to `.md` / `.pdf` / `.docx`
-- add reproducible benchmarks
-- add proper automated tests
+- add benchmarks and evaluation
+- add real automated tests
 
 ## Limitations
 
-- optimized primarily for Russian lecture audio
-- best suited for technical / scientific material
+- focused mainly on Russian lecture audio
+- best suited for technical / scientific content
 - still sensitive to transcript noise
-- not yet packaged as a user-facing product
-- some modules are research stubs by design
-
-## Why This Repo Exists
-
-The goal is not just "summarization".
-
-The goal is a local, extensible pipeline for generating **structured academic conspects** from long, noisy lecture audio under real hardware limits.
+- not packaged as a user-facing application yet
+- some parts are intentionally research stubs
 
 ## Citation
 

@@ -146,5 +146,5 @@ class Clustering(Trackable):
     pass
 
 
-class Compession(Trackable):
+class Compression(Trackable):
     pass
