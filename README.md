@@ -187,8 +187,8 @@ Planned coverage:
 Placeholder for future paper / preprint.
 
 ```bibtex
-@misc{LongConspectWriter,
-  title  = {Conspectius Engine},
+@misc{long_conspect_writer,
+  title  = {LongConspectWriter},
   author = {TODO},
   year   = {2026},
   note   = {Work in progress}
