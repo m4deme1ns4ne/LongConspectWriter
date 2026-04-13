@@ -105,10 +105,8 @@ def main() -> None:
     args = parser.parse_args()
     action = args.action
 
-    config_agents = load_pipeline_configs(
-        Path("src") / "configs" / "config_agents.yaml"
-    )
-    pipeline_conspectius = ConspectiusPipeline(*config_agents)
+    config = load_pipeline_configs(Path("src") / "configs" / "config.yaml")
+    pipeline_conspectius = ConspectiusPipeline(*config)
 
     if action == "global_clustering":
         if args.global_plan_path is None:

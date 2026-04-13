@@ -27,7 +27,7 @@ stt_app_config:
 # ==================
 
 drafter_init_config:
-  pretrained_model_name_or_path: "Qwen/Qwen2.5-3B-Instruct"
+  pretrained_model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
   torch_dtype: null
   device_map: null
   trust_remote_code: false
@@ -40,11 +40,10 @@ drafter_init_config:
 
 
 drafter_gen_config:
-  max_new_tokens: 500
-  repetition_penalty: 1.15
-  temperature: 0.01
-  top_p: 0.9
-  do_sample: true
+  max_new_tokens: 1000
+  repetition_penalty: 1.1
+  temperature: null
+  do_sample: false
   guidance_scale: 1.5
 
 drafter_app_config:
@@ -58,7 +57,7 @@ drafter_app_config:
 
 
 synthesizer_init_config:
-  pretrained_model_name_or_path: "Qwen/Qwen2.5-1.5B-Instruct"
+  pretrained_model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
   torch_dtype: null
   device_map: null
   trust_remote_code: true
@@ -74,8 +73,8 @@ synthesizer_gen_config:
   max_new_tokens: 4096
   repetition_penalty: 1.05
   temperature: 0.5
-  top_p: 0.9
   do_sample: true
+  top_p: 0.9
 
 synthesizer_app_config:
   agent_name: "synthesizer"

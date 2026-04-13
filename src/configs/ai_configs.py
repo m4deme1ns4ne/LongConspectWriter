@@ -69,10 +69,10 @@ class LLMInitConfig:
 @dataclass
 class LLMGenConfig:
     max_new_tokens: int
-    repetition_penalty: float
-    temperature: float
-    top_p: float
-    do_sample: bool
+    repetition_penalty: float | None = None
+    temperature: float | None = None
+    top_p: float | None = None
+    do_sample: bool | None = False
     guidance_scale: float | None = None
 
 
