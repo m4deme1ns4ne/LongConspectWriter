@@ -1,4 +1,4 @@
-# Conspectius Engine
+# LongConspectWriter
 
 [Русская версия](README.ru.md)
 
@@ -187,7 +187,7 @@ Planned coverage:
 Placeholder for future paper / preprint.
 
 ```bibtex
-@misc{conspectius_engine,
+@misc{LongConspectWriter,
   title  = {Conspectius Engine},
   author = {TODO},
   year   = {2026},
