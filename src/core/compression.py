@@ -13,7 +13,7 @@ class SmartCompressor:
 
     def _compress_cluster(self): ...
 
-    def process(self, path):
+    def run(self, path):
         # with open(path, "r", encoding="utf-8") as file:
         #     global_clusters = json.load(file)
 

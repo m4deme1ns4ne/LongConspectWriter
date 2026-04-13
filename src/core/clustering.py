@@ -10,7 +10,38 @@ from src.core.utils import SEPARATOR
 import json
 from sentence_transformers import util
 import torch
-from src.agents.base_agent import Trackable
+from src.core.base import Trackable
+
+
+class Visualize_clustering_metrics:
+    # TODO: [ТЕХДОЛГ - Observability] Реализовать визуализацию распределения кластеров
+    # Использовать: plotly (для интерактива) или matplotlib/seaborn (для статики) + umap-learn для проекций
+    def _visualize_clustering_metrics(
+        self,
+        sentences: list,
+        local_labels: list,
+        global_clusters: dict,
+        local_embeddings: np.ndarray,
+    ):
+        """
+        Отрисовка метрик кластеризации для калибровки порогов (distance_threshold) и отлова галлюцинаций матчинга.
+
+        # 1. Локальная кластеризация (Хронологическая гистограмма)
+        # Данные: local_labels -> подсчет частоты (сколько sentences в каждом label).
+        # График: Bar Chart.
+        # Ось X: Индекс кластера (строго по порядку времени 0, 1, 2...).
+        # Ось Y: Количество предложений (размер кластера).
+        # Ожидание: Отсутствие "пилы" (чередования кластеров по 1 предложению) и гигантских монолитов.
+
+        # 2. Глобальная кластеризация (Семантический Scatter Plot)
+        # Данные: local_embeddings (векторы e5-small) -> сжать до 2D через PCA или UMAP.
+        # График: 2D Scatter Plot.
+        # Точки: Локальные кластеры.
+        # Цвет (hue): Название главы из global_clusters, к которой привязан кластер.
+        # Ожидание: Четкие визуальные облака точек. Если точка далеко от своего облака — это мусор,
+        # который алгоритм притянул к главе "за уши". Нужно вводить threshold для косинусного расстояния.
+        """
+        pass
 
 
 class BaseClusterizer(Trackable):
@@ -69,7 +100,6 @@ class SemanticLocalClusterizer(BaseClusterizer):
     def _format_cluster_output(self, sentences, labels):
         grouped_data = {}
         for index, (items, label) in enumerate(zip(sentences, labels)):
-
             label = int(label)
 
             if label not in grouped_data:

@@ -4,7 +4,7 @@ from tqdm import tqdm
 import os
 import sys
 from src.core.utils import TqdmTokenStreamer
-from src.agents.base_agent import BaseTransformersAgent
+from src.core.base import BaseTransformersAgent
 from pathlib import Path
 from src.core.utils import SEPARATOR
 

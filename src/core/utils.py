@@ -3,7 +3,6 @@ from tqdm import tqdm
 from transformers.generation.streamers import BaseStreamer
 from transformers import AutoTokenizer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from src.configs.bad_words import BAD_WORDS
 import yaml
 from os import PathLike
 import functools
@@ -19,13 +18,13 @@ class TextsSplitter:
 
     @staticmethod
     def split_text_to_tokens(
-        text: str, model_name: str, chunk_size: int = 2000
+        text: str, model_name: str, chunk_size: int = 2000, chunk_overlap: int = 0
     ) -> list[str]:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
             tokenizer=tokenizer,
             chunk_size=chunk_size,
-            chunk_overlap=150,
+            chunk_overlap=chunk_overlap,
             separators=["\n\n", "\n", ". ", "? ", "! ", " "],
         )
 
@@ -78,11 +77,10 @@ def log_retry_attempt(retry_state):
     )
 
 
-def bad_words_id_generate(tokenizer) -> list[list[int]]:
+def bad_words_id_generate(tokenizer, bad_words: list[str]) -> list[list[int]]:
     seen = set()
     bad_words_ids = []
-
-    for word in BAD_WORDS:
+    for word in bad_words:
         # Токенизируем строку в список int без служебных токенов
         ids = tokenizer.encode(word, add_special_tokens=False)
 

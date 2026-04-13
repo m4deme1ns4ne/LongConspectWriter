@@ -6,7 +6,7 @@ from pathlib import Path
 import json
 
 from loguru import logger
-from src.agents.base_agent import BaseTransformersAgent
+from src.core.base import BaseTransformersAgent
 from src.core.utils import TqdmTokenStreamer
 
 
@@ -14,6 +14,7 @@ class AgentSynthesizer(BaseTransformersAgent):
     def __init__(self, init_config, gen_config, app_config):
         super().__init__(init_config, gen_config, app_config)
 
+    # Это для ЛонгВрайтера на 8б, потом убрать, если не нужно будет.
     # def _build_prompt(self, **kwargs) -> str:
     #     user_prompt = self.user_template.format(**kwargs)
     #     full_prompt = (

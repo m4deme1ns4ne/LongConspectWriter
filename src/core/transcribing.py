@@ -5,7 +5,7 @@ from pathlib import Path
 from faster_whisper import WhisperModel
 from loguru import logger
 from tqdm import tqdm
-from src.agents.base_agent import BaseSTTAgent
+from src.core.base import BaseSTTAgent
 from src.configs.ai_configs import AppSTTConfig, STTGenConfig, STTInitConfig
 from dataclasses import asdict
 
@@ -109,5 +109,7 @@ class FasterWhisper(BaseSTTAgent):
 
                     progress = segment.end - pbar.n
                     pbar.update(progress)
+
+        logger.success(f"Получен путь для транскрибации: {final_path}")
 
         return final_path
