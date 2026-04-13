@@ -7,7 +7,7 @@ from loguru import logger
 import multiprocessing
 from os import PathLike
 from src.core.compression import SmartCompressor
-from src.agents.base_agent import Trackable
+from src.core.base import Trackable
 
 
 # Раздутый init потом поменять просто на датакласс
@@ -50,6 +50,7 @@ class ConspectiusPipeline(Trackable):
         self.global_planner_gen_config = global_planner_gen_config
         self.global_planner_app_config = global_planner_app_config
 
+    # Вот тут нужно будет пофиксить передачу аргументов в логах  Параметры транскрибации: TranscriptionOptions ну ты поймешь кароче
     def _run_stt_process(
         self, path: str | PathLike, result_queue: multiprocessing.Queue
     ) -> None:
@@ -116,6 +117,7 @@ class ConspectiusPipeline(Trackable):
             new_path = planner.run(path)
             return new_path
 
+    # Тут надо будеь пошаманить, чтобы он выдавал идельное кол во глав, может как то математически расчитывал...
     def _call_global_planner(self, path: str | PathLike) -> str | PathLike:
         """
         Собирает микро-темы в финальное оглавление (LLM Reduce).
@@ -187,33 +189,6 @@ class ConspectiusPipeline(Trackable):
             return None
         return new_path
 
-    # Идея передать метод — архитектурно правильная.
-    # Ты интуитивно пришел к паттерну Dependency Injection (Внедрение зависимостей) через передачу callback-функции.
-    # Для твоего разросшегося пайплайна это единственное адекватное решение.
-
-    # Вот почему это хороший подход:
-
-    #     Слабая связность (Decoupling): SmartCompressor — это маршрутизатор. Он не должен знать, как инициализировать LLM, какие веса грузить и какие конфиги нужны Экстрактору.
-    #     Его единственная ответственность — подсчет токенов и принятие решения.
-
-    #     Изолированное тестирование: Чтобы протестировать SmartCompressor, тебе больше не нужны GPU и загрузка моделей.
-    #     Ты передаешь в метод обычную mock-функцию (заглушку), которая возвращает строку "сжатый текст", и проверяешь логику if/else.
-    #     AgentDrafter при этом тестируется отдельно.
-
-    #     Чистота конструктора: Из SmartCompressor полностью уходят drafter_init_config, drafter_gen_config и drafter_app_config.
-    def _call_compression(self, path: str | PathLike) -> str | PathLike:
-        """
-        Запускает SmartCompressor — промежуточный этап между кластеризацией и синтезом.
-        Вход (path): Путь к глобальным кластерам (результат _call_clustering).
-        Выход: Путь к сжатому/обработанному файлу готовому для Synthesizer.
-        """
-        compressor = SmartCompressor(
-            synthesizer_init_config=self.synthesizer_init_config,
-            synthesizer_gen_config=self.synthesizer_gen_config,
-        )
-        new_path = compressor.process(path)
-        return new_path
-
     def _call_synthesizer(self, path: str | PathLike) -> str | PathLike:
         """
         Запускает AgentSynthesizer (LongWriter) для синтеза финального конспекта.
@@ -228,6 +203,11 @@ class ConspectiusPipeline(Trackable):
             new_path = synthesizer.run(path)
             return new_path
 
+    # Hallucination Detection: У них реализован отдельный многослойный модуль детекции галлюцинаций (синтаксический, семантический и entailment-check).
+    # Это то, чего пока не хватает в пайплайне. Малые модели (1.5B/3B) любят придумывать формулы.
+    # Добавление агента-валидатора в конец пайплайна, который сверял бы финальный Markdown с сырым транскриптом на предмет фактологии, вывело бы проект на
+    # индустриальный уровень.
+
     def run(self, audio_file_path: str | PathLike) -> str | None:
         """
         Главный оркестратор полного пайплайна: аудио → конспект.
@@ -237,21 +217,11 @@ class ConspectiusPipeline(Trackable):
         Выход: Путь к итоговому конспекту. None если пайплайн не вернул результат.
         """
         transcript_path = self._call_stt(audio_file_path)
-        logger.info(f"Получен путь для транскрибации: {transcript_path}")
 
-        clustering_path = self._call_clustering(transcript_path)
+        compressed_transcript_path = self._call_drafter(transcript_path)
 
-        # Для теста пайплайна убрал пока что
-        # compression_path = self._call_compression(clustering_path)
+        clustering_path = self._call_clustering(compressed_transcript_path)
 
         conspect_path = self._call_synthesizer(clustering_path)
 
-        # if not chunk_conspects_path:
-        #     logger.warning("Drafter не вернул ни одного валидного мини-конспекта.")
-        #     return None
-
-        # logger.info(f"Получен путь до мини-конспектов: {chunk_conspects_path}")
-        # final_conspect_path = self._call_synthesizer(chunk_conspects_path)
-
-        # return final_conspect_path
         return conspect_path
