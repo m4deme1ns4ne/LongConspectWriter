@@ -1,0 +1,139 @@
+# STT-Agent
+# ==================
+
+
+stt_init_config:
+  model_size_or_path: "large-v3-turbo"
+  device: null
+  compute_type: null
+
+stt_gen_config:
+  beam_size: 5
+  vad_filter: true
+  condition_on_previous_text: false
+  no_speech_threshold: 0.45
+  compression_ratio_threshold: 2.4
+  language: "ru"
+  vad_parameters:
+    min_silence_duration_ms: 500
+    speech_pad_ms: 400
+    threshold: 0.7
+
+stt_app_config:
+  output_dir: "src/tests/test_data/example-transcrib"
+
+
+# Drafter-Agent
+# ==================
+
+drafter_init_config:
+  pretrained_model_name_or_path: "Qwen/Qwen3-0.6B"
+  torch_dtype: null
+  device_map: null
+  trust_remote_code: false
+  attn_implementation: "sdpa"
+  quantization_config:
+    load_in_4bit: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_compute_dtype: null
+
+
+drafter_gen_config:
+  max_new_tokens: 100
+  repetition_penalty: 1.1
+  temperature: null
+  do_sample: false
+  guidance_scale: 1.5
+
+drafter_app_config:
+  agent_name: "drafter"
+  prompt_path: "src/tests/test_prompts.yaml"
+  output_dir: "src/tests/test_data/example-mini-conspect"
+
+
+# Syntizer-Agent
+# ==================
+
+
+synthesizer_init_config:
+  pretrained_model_name_or_path: "Qwen/Qwen3-0.6B"
+  torch_dtype: null
+  device_map: null
+  trust_remote_code: true
+  attn_implementation: "sdpa"
+  quantization_config:
+    load_in_4bit: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_compute_dtype: null
+
+
+synthesizer_gen_config:
+  max_new_tokens: 10
+  repetition_penalty: 1.05
+  temperature: 0.5
+  do_sample: true
+  top_p: 0.9
+
+synthesizer_app_config:
+  agent_name: "synthesizer"
+  prompt_path: "src/tests/test_prompts.yaml"
+  output_dir: "src/tests/test_data/example-conspect"
+
+
+# AgentLocalPlanner
+# ==================
+
+
+local_planner_init_config:
+  pretrained_model_name_or_path: "Qwen/Qwen3-0.6B"
+  torch_dtype: null
+  device_map: null
+  trust_remote_code: true
+  attn_implementation: "sdpa"
+  quantization_config:
+    load_in_4bit: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_compute_dtype: null
+
+local_planner_gen_config:
+  max_new_tokens: 50
+  repetition_penalty: 1.15
+  temperature: 0.1
+  top_p: 0.9
+  do_sample: true
+
+local_planner_app_config:
+  agent_name: "local_planner"
+  prompt_path: "src/tests/test_prompts.yaml"
+  output_dir: "src/tests/test_data/example-plan/example-local-plan"
+
+
+# AgentGlobalPlanner
+# ==================
+
+global_planner_init_config:
+  pretrained_model_name_or_path: "Qwen/Qwen3-0.6B"
+  torch_dtype: null
+  device_map: null
+  trust_remote_code: true
+  attn_implementation: "sdpa"
+  quantization_config:
+    load_in_4bit: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_compute_dtype: null
+
+global_planner_gen_config:
+  max_new_tokens: 50
+  repetition_penalty: 1.05
+  temperature: 0.1
+  top_p: 0.9
+  do_sample: true
+
+global_planner_app_config:
+  agent_name: "global_planner"
+  prompt_path: "src/tests/test_prompts.yaml"
+  output_dir: "src/tests/test_data/example-plan/example-global-plan"
