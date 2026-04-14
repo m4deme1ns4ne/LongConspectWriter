@@ -4,27 +4,18 @@
 
 Research MVP for generating structured academic notes from long lecture audio.
 
-The repository focuses on a simple idea: long, noisy lecture transcripts are easier to process as a multi-stage local pipeline than as a single giant prompt. Instead of asking one model to do everything at once, the project splits the task into transcription, cleaning, clustering, planning, and synthesis.
+The project uses a local multi-stage pipeline instead of a single giant prompt. Long, noisy lecture transcripts are processed step by step: transcription, transcript cleaning, semantic grouping, structure planning, topic matching, and final long-form synthesis.
 
-## Current State
-
-This is a working research MVP, not a polished product.
-
-What already works:
+## What Works Now
 
 - `STT` with `faster-whisper`
 - transcript cleaning with `Drafter`
 - local semantic clustering
 - local and global planning
-- topic-to-cluster matching
+- global topic assignment
 - final conspect generation with `Synthesizer`
 
-What is still experimental:
-
-- `SmartCompressor`
-- hallucination validation
-- visualization/export pipeline
-- stronger evaluation and automated tests
+This is a working research MVP, not a finished product.
 
 ## Current Pipeline
 
@@ -32,12 +23,20 @@ Main `all` flow:
 
 `audio -> STT -> Drafter -> Local Clustering -> Local Planner -> Global Planner -> Global Clustering -> Synthesizer`
 
-The current version is optimized for:
+In the current version:
+
+- `Drafter` cleans raw transcript noise before downstream processing
+- `Synthesizer` works topic by topic and can split large topic clusters into smaller chunks
+- intermediate artifacts are saved to disk for inspection and debugging
+
+## Scope
+
+The project is currently aimed at:
 
 - Russian-language lecture audio
 - STEM / technical subjects
 - local inference with limited VRAM
-- inspectable intermediate artifacts saved to disk
+- long-form academic note generation instead of short summarization
 
 ## Quick Start
 
@@ -105,9 +104,9 @@ You can change:
 ```text
 src/
   agents/      # Drafter, Planner, Synthesizer
-  core/        # base abstractions, pipeline, STT, clustering, compression, utils
+  core/        # base abstractions, pipeline, STT, clustering, utils
   configs/     # model configs, prompts, bad words
-  tests/       # placeholders for smoke / unit / e2e tests
+  tests/       # test placeholders and test configs
 
 data/
   example-audio/
@@ -118,9 +117,9 @@ data/
   example-conspect/
 ```
 
-## Outputs
+## Saved Artifacts
 
-The pipeline stores intermediate artifacts on disk so each step can be inspected separately:
+The pipeline writes intermediate results to disk so each stage can be inspected separately:
 
 - raw transcripts
 - cleaned transcripts
@@ -130,57 +129,33 @@ The pipeline stores intermediate artifacts on disk so each step can be inspected
 - global clusters
 - final generated conspects
 
-This is intentional and useful for debugging, iteration, and future experiments.
+This is intentional and useful for debugging, research iteration, and future evaluation.
 
-## Demo
+## Tests
+
+There is no full automated test suite yet, but the repository already contains test-oriented config files:
+
+- `src/tests/test_config.yaml`
+- `src/tests/test_prompts.yaml`
+
+They can be used as lightweight fixtures for short local runs.
+
+## Demo / Results
 
 Placeholder for:
 
 - pipeline diagram
 - sample output screenshots
 - before / after cleaning examples
-- demo gif or short video
-
-<!-- TODO: add demo media -->
-
-## Example Results
-
-Placeholder for:
-
-- short lecture sample
-- transcript fragment
-- cleaned transcript fragment
-- generated plan
-- final conspect excerpt
-
-## Tests
-
-Test section placeholder.
-
-Planned coverage:
-
-- smoke tests
-- unit tests for utilities
-- integration tests for pipeline stages
-- short end-to-end sample run
-
-## Roadmap
-
-- stabilize the current end-to-end path
-- finish `SmartCompressor`
-- improve math-aware post-processing
-- add hallucination checks
-- add export to `.md` / `.pdf` / `.docx`
-- add benchmarks and evaluation
-- add real automated tests
+- small end-to-end examples
 
 ## Limitations
 
 - focused mainly on Russian lecture audio
 - best suited for technical / scientific content
-- still sensitive to transcript noise
+- still sensitive to transcript quality
 - not packaged as a user-facing application yet
-- some parts are intentionally research stubs
+- evaluation is still manual / research-oriented
 
 ## Citation
 
@@ -197,4 +172,4 @@ Placeholder for future paper / preprint.
 
 ## License
 
-See [LICENSE](LICENSE).
+This repository is currently licensed under the [MIT License](LICENSE).
