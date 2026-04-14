@@ -6,7 +6,6 @@ from src.core.clustering import SemanticLocalClusterizer, SemanticGlobalClusteri
 from loguru import logger
 import multiprocessing
 from os import PathLike
-from src.core.compression import SmartCompressor
 from src.core.base import Trackable
 
 

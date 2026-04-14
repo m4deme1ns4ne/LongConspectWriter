@@ -88,7 +88,7 @@ class AgentDrafter(BaseTransformersAgent):
         if not final_drafts:
             logger.warning("Drafter не нашел ни одного содержательного чанка.")
             return ""
-        
+
         final_drafts = " ".join(final_drafts)
 
         for i, chunk in enumerate(compression_ratio, start=1):
