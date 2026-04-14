@@ -70,7 +70,7 @@ synthesizer_init_config:
 
 
 synthesizer_gen_config:
-  max_new_tokens: 4096
+  max_new_tokens: 1024
   repetition_penalty: 1.05
   temperature: 0.5
   do_sample: true

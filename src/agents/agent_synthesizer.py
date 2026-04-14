@@ -7,59 +7,83 @@ import json
 
 from loguru import logger
 from src.core.base import BaseTransformersAgent
-from src.core.utils import TqdmTokenStreamer
+from src.core.utils import TqdmTokenStreamer, TextsSplitter
 
 
 class AgentSynthesizer(BaseTransformersAgent):
     def __init__(self, init_config, gen_config, app_config):
         super().__init__(init_config, gen_config, app_config)
 
-    # Это для ЛонгВрайтера на 8б, потом убрать, если не нужно будет.
-    # def _build_prompt(self, **kwargs) -> str:
-    #     user_prompt = self.user_template.format(**kwargs)
-    #     full_prompt = (
-    #         f"{self.system_prompt}\n"
-    #         f"{user_prompt}\n"
-    #         "<|start_header_id|>assistant<|end_header_id|>\n\n"
-    #     )
-
-    #     return full_prompt
-
     def run(self, path: Path) -> str:
         with open(path, "r", encoding="utf-8") as file:
             global_clusters = json.load(file)
 
         conspect = {topik: [] for topik, _ in global_clusters.items()}
+
+        previous_context = "Это начало лекции, предыдущего контекста нет."
+
+        # УРОВЕНЬ 1: Цикл по глобальным темам (Кластерам)
         with tqdm(
             total=len(global_clusters),
             unit="кластер",
-            desc="Кластеры",
+            desc="Темы",
             colour="green",
             position=0,
             file=sys.stdout,
             dynamic_ncols=True,
         ) as pbar:
             for topik, clusters in global_clusters.items():
-                split_clusters = " ".join(clusters)
+                full_text = " ".join(clusters)
+                split_clusters: list[str] = TextsSplitter.split_text_to_tokens(
+                    text=full_text,
+                    model_name=self._init_config.pretrained_model_name_or_path,
+                    chunk_size=int(self._gen_config.max_new_tokens*0.5),
+                    chunk_overlap=0,
+                )
+                
+                # УРОВЕНЬ 2: Цикл по кускам текста внутри темы
                 with tqdm(
-                    total=self._gen_config.max_new_tokens,
-                    desc="Генерация токенов",
-                    unit="токен",
-                    colour="blue",
+                    total=len(split_clusters),
+                    desc="Чанки",
+                    unit="чанк",
+                    colour="red",
                     leave=False,
                     position=1,
                     file=sys.stdout,
                     dynamic_ncols=True,
-                ) as token_pbar:
-                    streamer = TqdmTokenStreamer(token_pbar)
-                    response = self._generate(
-                        prompt=self._build_prompt(
-                            text=split_clusters, cluster_topik=topik
-                        ),
-                        streamer=streamer,
-                    )
+                ) as chunk_pbar:
+                    for chunk in split_clusters:
+                        
+                        # УРОВЕНЬ 3: Цикл генерации токенов для одного куска
+                        with tqdm(
+                            total=self._gen_config.max_new_tokens,
+                            desc="Генерация токенов",
+                            unit="токен",
+                            colour="blue",
+                            leave=False,
+                            position=2,
+                            file=sys.stdout,
+                            dynamic_ncols=True,
+                        ) as token_pbar:
+                            streamer = TqdmTokenStreamer(token_pbar)
+                            response = self._generate(
+                                prompt=self._build_prompt(
+                                    chunk=chunk,
+                                    cluster_topik=topik,
+                                    previous_context=previous_context,
+                                ),
+                                streamer=streamer,
+                            )
+                        
+                        # Обновляем контекст и сохраняем ответ
+                        conspect[topik].append(response)
+                        previous_context = " ".join(response.split()[-40:])
+                        
+                        # Обновляем бар чанков (Уровень 2)
+                        chunk_pbar.update(1)
+                
+                # Обновляем бар глобальных кластеров (Уровень 1)
                 pbar.update(1)
-                conspect[topik].append(response)
 
         logger.info("Генерация финального конспекта завершена.")
 
