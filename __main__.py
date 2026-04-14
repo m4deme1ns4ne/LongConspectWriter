@@ -13,8 +13,17 @@ from src.configs.ai_configs import (
     STTGenConfig,
     STTInitConfig,
 )
+from tqdm import tqdm
+import warnings
+import transformers
 
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+# Глушим болтливость трансформеров
+transformers.logging.set_verbosity_error()
+
+# Глушим системные варнинги (опционально, если полезут другие)
+warnings.filterwarnings("ignore", category=UserWarning)
+
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
@@ -63,6 +72,15 @@ def load_pipeline_configs(yaml_path):
 
 def main() -> None:
     load_dotenv()
+    # Удаляем стандартный вывод в консоль, чтобы не было дублей
+    logger.remove()
+
+    # Добавляем новый обработчик: пропускаем все сообщения loguru через tqdm.write
+    logger.add(
+        lambda msg: tqdm.write(msg, end=""), 
+        colorize=True, 
+        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+    )
     parser = argparse.ArgumentParser(
         description="CLI для управления MAS LongConspectWriter."
     )
