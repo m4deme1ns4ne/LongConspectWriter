@@ -3,10 +3,11 @@ from src.agents.agent_drafter import AgentDrafter
 from src.agents.agent_synthesizer import AgentSynthesizer
 from src.agents.agent_planner import AgentLocalPlanner, AgentGlobalPlanner
 from src.core.clustering import SemanticLocalClusterizer, SemanticGlobalClusterizer
-from loguru import logger
-import multiprocessing
 from os import PathLike
 from src.core.base import Trackable
+from src.core.utils import check_path_is
+from pathlib import Path
+from src.core.convert_json_to_md import convert_json_to_md
 
 
 # Раздутый init потом поменять просто на датакласс
@@ -49,128 +50,16 @@ class ConspectiusPipeline(Trackable):
         self.global_planner_gen_config = global_planner_gen_config
         self.global_planner_app_config = global_planner_app_config
 
-    # Вот тут нужно будет пофиксить передачу аргументов в логах  Параметры транскрибации: TranscriptionOptions ну ты поймешь кароче
-    def _run_stt_process(
-        self, path: str | PathLike, result_queue: multiprocessing.Queue
-    ) -> None:
-        try:
-            faster_whisper = FasterWhisper(
-                init_config=self.stt_init_config,
-                gen_config=self.stt_gen_config,
-                app_config=self.stt_app_config,
-            )
-            transcript_path = faster_whisper.run(audio_file_path=path)
-            result_queue.put({"status": "success", "path": transcript_path})
-        except Exception as e:
-            result_queue.put({"status": "error", "error": str(e)})
+    @check_path_is
+    def _call_stt(self, path: Path) -> Path | None:
+        with FasterWhisper(
+            self.stt_init_config, self.stt_gen_config, self.stt_app_config
+        ) as model:
+            result_path = model.run(audio_file_path=path)
 
-    def _call_stt(self, path: str | PathLike) -> str:
-        """
-        Запускает модель транскрибации (FasterWhisper).
-        Вход (path): Путь к исходному аудио или видео файлу.
-        Выход: Путь к текстовому файлу (.txt) с сырой транскрипцией.
-        """
-        logger.info("Запуск STT агента в изолированном процессе...")
-        result_queue = multiprocessing.Queue()
-        process = multiprocessing.Process(
-            target=self._run_stt_process, args=(path, result_queue)
-        )
-        process.start()
-        process.join()
-        if not result_queue.empty():
-            result = result_queue.get()
-            if result["status"] == "success":
-                return result["path"]
-            else:
-                raise RuntimeError(
-                    f"Ошибка транскрибации в фоновом процессе: {result['error']}"
-                )
-        else:
-            raise RuntimeError(
-                "Процесс STT завершился, но не вернул результат. Возможно, произошло жесткое падение CTranslate2."
-            )
+        return result_path
 
-    def _call_local_clustering(self, path: str | PathLike) -> str | PathLike:
-        """
-        Разбивает сплошной текст на смысловые абзацы.
-        Вход (path): Путь к сырой транскрипции (результат STT).
-        Выход: Путь к файлу, где текст разделен сепараторами (локальные кластеры).
-        """
-        # Пока захардкодил. Потом добавить в конфиг
-        model_name = "cointegrated/rubert-tiny2"
-        model_local_clustering = SemanticLocalClusterizer(model_name)
-        new_path = model_local_clustering.run(path)
-        return new_path
-
-    def _call_local_planner(self, path: str | PathLike) -> str | PathLike:
-        """
-        Генерирует микро-темы для каждого абзаца на основе хронологических кластеров.
-        Вход (path): Путь к локальным кластерам.
-        Выход: Путь к файлу (.md) с плоским списком всех микро-тем лекции.
-        """
-        with AgentLocalPlanner(
-            init_config=self.local_planner_init_config,
-            gen_config=self.local_planner_gen_config,
-            app_config=self.local_planner_app_config,
-        ) as planner:
-            new_path = planner.run(path)
-            return new_path
-
-    # Тут надо будеь пошаманить, чтобы он выдавал идельное кол во глав, может как то математически расчитывал...
-    def _call_global_planner(self, path: str | PathLike) -> str | PathLike:
-        """
-        Собирает микро-темы в финальное оглавление (LLM Reduce).
-        Вход (path): Путь к списку микро-тем (результат LocalPlanner).
-        Выход: Путь к JSON-файлу со структурой глав (chapter_title, description).
-        """
-        with AgentGlobalPlanner(
-            init_config=self.global_planner_init_config,
-            gen_config=self.global_planner_gen_config,
-            app_config=self.global_planner_app_config,
-        ) as planner:
-            new_path = planner.run(path)
-            return new_path
-
-    def _call_planner(self, path: str | PathLike) -> str | PathLike:
-        """
-        Оркестратор планирования (Local -> Global).
-        Вход (path): Путь к локальным кластерам (сырые абзацы).
-        Выход: Путь к глобальному плану (JSON-оглавление).
-        """
-        local_clusters_path = self._call_local_planner(path)
-        new_path = self._call_global_planner(local_clusters_path)
-
-        return new_path
-
-    def _call_global_clustering(
-        self, global_plan_path: str | PathLike, local_clusters_path: str | PathLike
-    ) -> str | PathLike:
-        """
-        Связывает оригинальные абзацы с главами оглавления через косинусное сходство.
-        Вход:
-          - global_plan_path: Путь к JSON-оглавлению.
-          - local_clusters_path: Путь к оригинальным локальным кластерам (абзацам).
-        Выход: Путь к глобальным кластерам (Json)
-        """
-        # Пока захардкодил. Потом добавить в конфиг
-        model_name = "intfloat/multilingual-e5-small"
-        model_global_clustering = SemanticGlobalClusterizer(model_name)
-        new_path = model_global_clustering.run(global_plan_path, local_clusters_path)
-
-        return new_path
-
-    def _call_clustering(self, path: str | PathLike) -> str | PathLike:
-        """
-        Главный оркестратор всей логики кластеризации текста.
-        Вход (path): Путь к сырой транскрипции (результат STT).
-        Выход: Путь к глобальным кластерам разбитым по глобальным темам.
-        """
-        local_clusters_path = self._call_local_clustering(path)
-        plan_path = self._call_planner(local_clusters_path)
-        new_path = self._call_global_clustering(plan_path, local_clusters_path)
-
-        return new_path
-
+    @check_path_is
     def _call_drafter(self, path: str | PathLike) -> str | PathLike | None:
         """
         Запускает AgentDrafter для извлечения фактов, определений и теорем.
@@ -188,6 +77,94 @@ class ConspectiusPipeline(Trackable):
             return None
         return new_path
 
+    @check_path_is
+    def _call_local_clustering(self, path: str | PathLike) -> str | PathLike:
+        """
+        Разбивает сплошной текст на смысловые абзацы.
+        Вход (path): Путь к сырой транскрипции (результат STT).
+        Выход: Путь к файлу, где текст разделен сепараторами (локальные кластеры).
+        """
+        # Пока захардкодил. Потом добавить в конфиг
+        model_name = "cointegrated/rubert-tiny2"
+        model_local_clustering = SemanticLocalClusterizer(model_name)
+        new_path = model_local_clustering.run(path)
+        return new_path
+
+    @check_path_is
+    def _call_local_planner(self, path: str | PathLike) -> str | PathLike:
+        """
+        Генерирует микро-темы для каждого абзаца на основе хронологических кластеров.
+        Вход (path): Путь к локальным кластерам.
+        Выход: Путь к файлу (.md) с плоским списком всех микро-тем лекции.
+        """
+        with AgentLocalPlanner(
+            init_config=self.local_planner_init_config,
+            gen_config=self.local_planner_gen_config,
+            app_config=self.local_planner_app_config,
+        ) as planner:
+            new_path = planner.run(path)
+            return new_path
+
+    # Тут надо будеь пошаманить, чтобы он выдавал идельное кол во глав, может как то математически расчитывал...
+    @check_path_is
+    def _call_global_planner(self, path: str | PathLike) -> str | PathLike:
+        """
+        Собирает микро-темы в финальное оглавление (LLM Reduce).
+        Вход (path): Путь к списку микро-тем (результат LocalPlanner).
+        Выход: Путь к JSON-файлу со структурой глав (chapter_title, description).
+        """
+        with AgentGlobalPlanner(
+            init_config=self.global_planner_init_config,
+            gen_config=self.global_planner_gen_config,
+            app_config=self.global_planner_app_config,
+        ) as planner:
+            new_path = planner.run(path)
+            return new_path
+
+    @check_path_is
+    def _call_planner(self, path: str | PathLike) -> str | PathLike:
+        """
+        Оркестратор планирования (Local -> Global).
+        Вход (path): Путь к локальным кластерам (сырые абзацы).
+        Выход: Путь к глобальному плану (JSON-оглавление).
+        """
+        local_clusters_path = self._call_local_planner(path)
+        new_path = self._call_global_planner(local_clusters_path)
+
+        return new_path
+
+    @check_path_is
+    def _call_global_clustering(
+        self, global_plan_path: str | PathLike, local_clusters_path: str | PathLike
+    ) -> str | PathLike:
+        """
+        Связывает оригинальные абзацы с главами оглавления через косинусное сходство.
+        Вход:
+          - global_plan_path: Путь к JSON-оглавлению.
+          - local_clusters_path: Путь к оригинальным локальным кластерам (абзацам).
+        Выход: Путь к глобальным кластерам (Json)
+        """
+        # Пока захардкодил. Потом добавить в конфиг
+        model_name = "intfloat/multilingual-e5-small"
+        model_global_clustering = SemanticGlobalClusterizer(model_name)
+        new_path = model_global_clustering.run(global_plan_path, local_clusters_path)
+
+        return new_path
+
+    @check_path_is
+    def _call_clustering(self, path: str | PathLike) -> str | PathLike:
+        """
+        Главный оркестратор всей логики кластеризации текста.
+        Вход (path): Путь к сырой транскрипции (результат STT).
+        Выход: Путь к глобальным кластерам разбитым по глобальным темам.
+        """
+        local_clusters_path = self._call_local_clustering(path)
+        plan_path = self._call_planner(local_clusters_path)
+        new_path = self._call_global_clustering(plan_path, local_clusters_path)
+
+        return new_path
+
+    @check_path_is
     def _call_synthesizer(self, path: str | PathLike) -> str | PathLike:
         """
         Запускает AgentSynthesizer (LongWriter) для синтеза финального конспекта.
@@ -223,4 +200,13 @@ class ConspectiusPipeline(Trackable):
 
         conspect_path = self._call_synthesizer(clustering_path)
 
-        return conspect_path
+        final_conspect_path = convert_json_to_md(path=conspect_path)
+
+        # Потом убрать и что то нормальное придумать
+        from loguru import logger
+
+        logger.success(
+            f"Финальный конспект успешно сохранен по пути: {final_conspect_path}"
+        )
+
+        return final_conspect_path

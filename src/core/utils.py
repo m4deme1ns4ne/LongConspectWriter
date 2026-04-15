@@ -8,6 +8,7 @@ from os import PathLike
 import functools
 import time
 from razdel import sentenize
+import sys
 
 
 class TextsSplitter:
@@ -81,22 +82,20 @@ def bad_words_id_generate(tokenizer, bad_words: list[str]) -> list[list[int]]:
     seen = set()
     bad_words_ids = []
     for word in bad_words:
-        # Токенизируем строку в список int без служебных токенов
-        ids = tokenizer.encode(word, add_special_tokens=False)
+        variants = [word, f" {word}"]
+        for variant in variants:
+            ids = tokenizer.encode(variant, add_special_tokens=False)
 
-        # Пропускаем если токенизатор вернул пустой список
-        if not ids:
-            continue
+            if not ids:
+                continue
 
-        # Преобразуем в tuple для хранения в set (list не хешируемый)
-        ids_tuple = tuple(ids)
+            ids_tuple = tuple(ids)
 
-        # Пропускаем дубликаты
-        if ids_tuple in seen:
-            continue
+            if ids_tuple in seen:
+                continue
 
-        seen.add(ids_tuple)
-        bad_words_ids.append(ids)
+            seen.add(ids_tuple)
+            bad_words_ids.append(ids)
 
     return bad_words_ids
 
@@ -116,11 +115,23 @@ def log_execution_time(func):
         elapsed = time.perf_counter() - start
         hours, rem = divmod(elapsed, 3600)
         minutes, seconds = divmod(rem, 60)
-        logger.success(
+        logger.debug(
             f"[{func.__qualname__}] завершён за "
             f"{int(hours)}ч {int(minutes)}м {seconds:.1f}с"
         )
         return result
+
+    return wrapper
+
+
+def check_path_is(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        out_path = func(*args, **kwargs)
+        if out_path is None:
+            logger.critical(f"{func.__qualname__} сгенерировал пустой путь.")
+            sys.exit(1)
+        return out_path
 
     return wrapper
 

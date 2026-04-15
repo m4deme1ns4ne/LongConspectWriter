@@ -11,7 +11,7 @@ from dataclasses import asdict
 
 
 class FasterWhisper(BaseSTTAgent):
-    """Агент для локальной транскрибации аудио с помощью faster-whisper."""
+    """Агент для транскрибации аудио."""
 
     def __init__(
         self,
@@ -30,6 +30,16 @@ class FasterWhisper(BaseSTTAgent):
             **asdict(self._init_config),
         )
         logger.info(f"Модель {self._init_config.model_size_or_path} загружена.")
+
+        logger.debug(
+            f"Параметры запуска агента {self.__class__.__name__}: {self._init_config}"
+        )
+        logger.debug(
+            f"Параметры генерации агента {self.__class__.__name__}: {self._gen_config}"
+        )
+        logger.debug(
+            f"Параметры использования агента {self.__class__.__name__}: {self._app_config}"
+        )
 
     def run(self, audio_file_path: Path) -> str:
         """
@@ -73,14 +83,9 @@ class FasterWhisper(BaseSTTAgent):
                 f"Язык был задан явно, вероятности альтернатив недоступны: {self._gen_config.language}"
             )
 
-        # Оставляем параметры для дебага
-        logger.debug(f"Параметры транскрибации: {info.transcription_options}")
-
-        # Считаем сэкономленное время
         duration_mins = info.duration / 60
         logger.info(f"Исходная длительность аудио: {duration_mins:.2f} мин.")
 
-        # faster-whisper отдает duration_after_vad только если включен vad_filter=True
         if info.duration_after_vad is not None:
             vad_mins = info.duration_after_vad / 60
             saved_mins = duration_mins - vad_mins

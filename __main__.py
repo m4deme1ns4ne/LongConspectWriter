@@ -17,12 +17,8 @@ from tqdm import tqdm
 import warnings
 import transformers
 
-# Глушим болтливость трансформеров
 transformers.logging.set_verbosity_error()
-
-# Глушим системные варнинги (опционально, если полезут другие)
 warnings.filterwarnings("ignore", category=UserWarning)
-
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -72,15 +68,13 @@ def load_pipeline_configs(yaml_path):
 
 def main() -> None:
     load_dotenv()
-    # Удаляем стандартный вывод в консоль, чтобы не было дублей
     logger.remove()
-
-    # Добавляем новый обработчик: пропускаем все сообщения loguru через tqdm.write
     logger.add(
-        lambda msg: tqdm.write(msg, end=""), 
-        colorize=True, 
-        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+        lambda msg: tqdm.write(msg, end=""),
+        colorize=True,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
     )
+
     parser = argparse.ArgumentParser(
         description="CLI для управления MAS LongConspectWriter."
     )
@@ -120,10 +114,19 @@ def main() -> None:
         required=False,
         help="Путь к входному файлу для локальных кластеров",
     )
+    parser.add_argument(
+        "--config_path",
+        type=str,
+        required=False,
+        help="Путь к конфигу",
+    )
     args = parser.parse_args()
     action = args.action
+    if args.config_path is None:
+        config = load_pipeline_configs(Path("src") / "configs" / "config.yaml")
+    else:
+        config = load_pipeline_configs(Path(args.config_path))
 
-    config = load_pipeline_configs(Path("src") / "configs" / "config.yaml")
     pipeline_conspectius = ConspectiusPipeline(*config)
 
     if action == "global_clustering":
@@ -185,10 +188,10 @@ def main() -> None:
             output_path = pipeline_conspectius._call_clustering(path_to_file)
 
     if output_path is not None:
-        logger.info(f"Работа завершена.")
+        logger.info("Работа завершена.")
         return
 
-    logger.critical(f"Переменная output_path пустая!")
+    logger.critical("Переменная output_path пустая!")
     return
 
 
