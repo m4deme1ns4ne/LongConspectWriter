@@ -4,7 +4,7 @@
 
 Research MVP for generating structured academic notes from long lecture audio.
 
-The project uses a local multi-stage pipeline instead of a single giant prompt. Long, noisy lecture transcripts are processed step by step: transcription, transcript cleaning, semantic grouping, structure planning, topic matching, and final long-form synthesis.
+The project uses a local multi-stage pipeline instead of a single giant prompt. Long, noisy lecture transcripts are processed step by step: transcription, transcript cleaning, semantic grouping, structure planning, topic matching, final long-form synthesis, and Markdown export of the last JSON result.
 
 ## What Works Now
 
@@ -13,7 +13,7 @@ The project uses a local multi-stage pipeline instead of a single giant prompt. 
 - local semantic clustering
 - local and global planning
 - global topic assignment
-- final conspect generation with `Synthesizer`
+- final JSON conspect generation with `Synthesizer` and Markdown export
 
 This is a working research MVP, not a finished product.
 
@@ -21,12 +21,13 @@ This is a working research MVP, not a finished product.
 
 Main `all` flow:
 
-`audio -> STT -> Drafter -> Local Clustering -> Local Planner -> Global Planner -> Global Clustering -> Synthesizer`
+`audio -> STT -> Drafter -> Local Clustering -> Local Planner -> Global Planner -> Global Clustering -> Synthesizer -> Markdown export`
 
 In the current version:
 
-- `Drafter` cleans raw transcript noise before downstream processing
-- `Synthesizer` works topic by topic and can split large topic clusters into smaller chunks
+- `Drafter` cleans raw transcript noise before downstream processing and keeps only fragments with academic content
+- `Synthesizer` works topic by topic, can split large topic clusters into smaller chunks, and produces the final structured JSON draft
+- the final JSON draft is converted into a Markdown conspect at the end of the pipeline
 - intermediate artifacts are saved to disk for inspection and debugging
 
 ## Scope
@@ -58,6 +59,12 @@ uv sync
 uv run python __main__.py --action all --path_to_file "data/example-audio/your_lecture.mp3"
 ```
 
+If you want to use a custom config, pass:
+
+```bash
+uv run python __main__.py --action all --path_to_file "data/example-audio/your_lecture.mp3" --config_path "src/configs/config.yaml"
+```
+
 ### Run individual stages
 
 ```bash
@@ -68,6 +75,8 @@ uv run python __main__.py --action planner --path_to_file "data/example-clusters
 uv run python __main__.py --action global_clustering --global_plan_path "data/example-plan/example-global-plan/plan.json" --local_clusters_path "data/example-clusters/example-local-clusters/your_clusters.txt"
 uv run python __main__.py --action synthesizer --path_to_file "data/example-clusters/example-global-clusters/global_clusters.json"
 ```
+
+`all` now runs the complete chain and then exports the final JSON into a Markdown file.
 
 ### Available CLI actions
 
@@ -98,6 +107,7 @@ You can change:
 - output directories
 - STT options
 - blocked phrases for generation cleanup
+- CLI config path via `--config_path`
 
 ## Project Structure
 
@@ -127,7 +137,8 @@ The pipeline writes intermediate results to disk so each stage can be inspected 
 - local plans
 - global plans
 - global clusters
-- final generated conspects
+- final generated JSON drafts
+- exported Markdown conspects
 
 This is intentional and useful for debugging, research iteration, and future evaluation.
 
@@ -156,6 +167,7 @@ Placeholder for:
 - still sensitive to transcript quality
 - not packaged as a user-facing application yet
 - evaluation is still manual / research-oriented
+- final Markdown export is a simple formatter over the generated JSON, so malformed upstream output can still affect the result
 
 ## Citation
 
