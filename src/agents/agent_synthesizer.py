@@ -7,7 +7,8 @@ import json
 
 from loguru import logger
 from src.core.base import BaseTransformersAgent
-from src.core.utils import TqdmTokenStreamer, TextsSplitter
+from src.core.utils import TqdmTokenStreamer, TextsSplitter, bad_words_id_generate
+from src.configs.bad_words import BAD_WORDS_SYNTHESIZER
 
 
 class AgentSynthesizer(BaseTransformersAgent):
@@ -21,6 +22,10 @@ class AgentSynthesizer(BaseTransformersAgent):
         conspect = {topik: [] for topik, _ in global_clusters.items()}
 
         previous_context = "Это начало лекции, предыдущего контекста нет."
+
+        bad_words_ids = bad_words_id_generate(
+            tokenizer=self.tokenizer, bad_words=BAD_WORDS_SYNTHESIZER
+        )
 
         # УРОВЕНЬ 1: Цикл по глобальным темам (Кластерам)
         with tqdm(
@@ -37,10 +42,10 @@ class AgentSynthesizer(BaseTransformersAgent):
                 split_clusters: list[str] = TextsSplitter.split_text_to_tokens(
                     text=full_text,
                     model_name=self._init_config.pretrained_model_name_or_path,
-                    chunk_size=int(self._gen_config.max_new_tokens*0.5),
+                    chunk_size=int(self._gen_config.max_new_tokens * 0.5),
                     chunk_overlap=0,
                 )
-                
+
                 # УРОВЕНЬ 2: Цикл по кускам текста внутри темы
                 with tqdm(
                     total=len(split_clusters),
@@ -53,7 +58,6 @@ class AgentSynthesizer(BaseTransformersAgent):
                     dynamic_ncols=True,
                 ) as chunk_pbar:
                     for chunk in split_clusters:
-                        
                         # УРОВЕНЬ 3: Цикл генерации токенов для одного куска
                         with tqdm(
                             total=self._gen_config.max_new_tokens,
@@ -73,15 +77,18 @@ class AgentSynthesizer(BaseTransformersAgent):
                                     previous_context=previous_context,
                                 ),
                                 streamer=streamer,
+                                bad_words_ids=bad_words_ids,
                             )
-                        
+
                         # Обновляем контекст и сохраняем ответ
                         conspect[topik].append(response)
-                        previous_context = " ".join(response.split()[-40:])
-                        
+                        previous_context = " ".join(
+                            response.split()[-(self._gen_config.max_new_tokens // 3) :]
+                        )
+
                         # Обновляем бар чанков (Уровень 2)
                         chunk_pbar.update(1)
-                
+
                 # Обновляем бар глобальных кластеров (Уровень 1)
                 pbar.update(1)
 

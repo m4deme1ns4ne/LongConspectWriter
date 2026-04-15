@@ -67,9 +67,11 @@ class AgentDrafter(BaseTransformersAgent):
                         streamer=streamer,
                     )
                 pbar.update(1)
-                if "[NO_CONTEXT]" in response:
+                response = response.strip()
+                if "[NO_CONTEXT]" == response:
                     ignored_chunks += 1
                     continue
+                response = response.replace("[NO_CONTEXT]", "").strip()
 
                 orig_tokens = len(
                     self.tokenizer.encode(chunk, add_special_tokens=False)

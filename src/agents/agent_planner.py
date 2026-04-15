@@ -47,7 +47,7 @@ class AgentLocalPlanner(BaseTransformersAgent):
         with open(path, "r", encoding="utf-8") as file:
             local_clusters = file.read()
 
-        max_tokens = 2000
+        max_tokens = int(self._gen_config.max_new_tokens * 2)
         chunking_local_clusters = self._chunking(local_clusters, max_tokens)
         logger.info(
             f"Локальных кластеров разбитых на {max_tokens} токенов получилось: {len(chunking_local_clusters)}"

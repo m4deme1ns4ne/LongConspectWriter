@@ -27,7 +27,7 @@ stt_app_config:
 # ==================
 
 drafter_init_config:
-  pretrained_model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
+  pretrained_model_name_or_path: "Qwen/Qwen3.5-4B"
   torch_dtype: null
   device_map: null
   trust_remote_code: false
@@ -40,11 +40,11 @@ drafter_init_config:
 
 
 drafter_gen_config:
-  max_new_tokens: 1000
-  repetition_penalty: 1.1
-  temperature: null
+  max_new_tokens: 512
+  repetition_penalty: 1.2
+  temperature: 0.1
   do_sample: false
-  guidance_scale: 1.5
+  guidance_scale: 1.0
 
 drafter_app_config:
   agent_name: "drafter"
@@ -57,7 +57,7 @@ drafter_app_config:
 
 
 synthesizer_init_config:
-  pretrained_model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
+  pretrained_model_name_or_path: "Qwen/Qwen3.5-9B" # Рассмотреть вариант с Qwen/Qwen3.5-0.8B
   torch_dtype: null
   device_map: null
   trust_remote_code: true
@@ -72,9 +72,10 @@ synthesizer_init_config:
 synthesizer_gen_config:
   max_new_tokens: 1024
   repetition_penalty: 1.05
-  temperature: 0.5
+  temperature: 0.1
   do_sample: true
   top_p: 0.9
+  guidance_scale: 1.0
 
 synthesizer_app_config:
   agent_name: "synthesizer"
@@ -87,7 +88,7 @@ synthesizer_app_config:
 
 
 local_planner_init_config:
-  pretrained_model_name_or_path: "Qwen/Qwen2.5-3B-Instruct"
+  pretrained_model_name_or_path: "Qwen/Qwen3.5-4B"
   torch_dtype: null
   device_map: null
   trust_remote_code: true
@@ -104,6 +105,7 @@ local_planner_gen_config:
   temperature: 0.1
   top_p: 0.9
   do_sample: true
+  guidance_scale: 1.0
 
 local_planner_app_config:
   agent_name: "local_planner"
@@ -115,7 +117,7 @@ local_planner_app_config:
 # ==================
 
 global_planner_init_config:
-  pretrained_model_name_or_path: "Qwen/Qwen2.5-7B-Instruct"
+  pretrained_model_name_or_path: "Qwen/Qwen3.5-4B"
   torch_dtype: null
   device_map: null
   trust_remote_code: true
@@ -132,6 +134,7 @@ global_planner_gen_config:
   temperature: 0.1
   top_p: 0.9
   do_sample: true
+  guidance_scale: 1.0
 
 global_planner_app_config:
   agent_name: "global_planner"
