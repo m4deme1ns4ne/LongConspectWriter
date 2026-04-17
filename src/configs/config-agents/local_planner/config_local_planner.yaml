@@ -1,0 +1,28 @@
+# AgentLocalPlanner
+
+
+init_config:
+  pretrained_model_name_or_path: "t-tech/T-lite-it-2.1"
+  torch_dtype: null
+  device_map: null
+  trust_remote_code: true
+  attn_implementation: "sdpa"
+  quantization_config:
+    load_in_4bit: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_compute_dtype: null
+
+gen_config:
+  max_new_tokens: 512
+  repetition_penalty: 1.0
+  temperature: 0.5
+  do_sample: true
+  top_p: 0.8
+  top_k: 20
+  guidance_scale: 1.0
+
+app_config:
+  agent_name: "local_planner"
+  prompt_path: "src/configs/config-agents/local_planner/prompt_local_planner.yaml"
+  output_dir: "data/example-plan/example-local-plan"

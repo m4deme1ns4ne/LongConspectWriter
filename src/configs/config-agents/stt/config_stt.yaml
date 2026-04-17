@@ -1,0 +1,22 @@
+# STT-Agent
+
+
+init_config:
+  model_size_or_path: "large-v3-turbo"
+  device: null
+  compute_type: null
+
+gen_config:
+  beam_size: 5
+  vad_filter: true
+  condition_on_previous_text: false
+  no_speech_threshold: 0.45
+  compression_ratio_threshold: 2.4
+  language: "ru"
+  vad_parameters:
+    min_silence_duration_ms: 500
+    speech_pad_ms: 400
+    threshold: 0.7
+
+app_config:
+  output_dir: "data/example-transcrib"

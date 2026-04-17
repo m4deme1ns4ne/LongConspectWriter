@@ -1,0 +1,26 @@
+# Drafter-Agent
+
+init_config:
+  pretrained_model_name_or_path: "Qwen/Qwen3.5-4B"
+  torch_dtype: null
+  device_map: null
+  trust_remote_code: false
+  attn_implementation: "sdpa"
+  quantization_config:
+    load_in_4bit: true
+    bnb_4bit_quant_type: "nf4"
+    bnb_4bit_use_double_quant: true
+    bnb_4bit_compute_dtype: null
+
+
+gen_config:
+  max_new_tokens: 512
+  repetition_penalty: 1.2
+  temperature: 0.1
+  do_sample: false
+  guidance_scale: 1.0
+
+app_config:
+  agent_name: "drafter"
+  prompt_path: "src/configs/config-agents/drafter/prompt_drafter.yaml"
+  output_dir: "data/example-mini-conspect"
