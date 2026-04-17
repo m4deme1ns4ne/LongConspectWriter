@@ -1,12 +1,14 @@
 from src.core.transcribing import FasterWhisper
 from src.agents.agent_drafter import AgentDrafter
-from src.agents.agent_synthesizer import AgentSynthesizer
+from src.agents.agent_synthesizer import (
+    AgentSynthesizerTransformers,
+    AgentSynthesizerLlama,
+)
 from src.agents.agent_planner import AgentLocalPlanner, AgentGlobalPlanner
 from src.core.clustering import SemanticLocalClusterizer, SemanticGlobalClusterizer
 from os import PathLike
 from src.core.base import Trackable
 from src.core.utils import check_path_is
-from pathlib import Path
 from src.core.convert_json_to_md import convert_json_to_md
 from loguru import logger
 import multiprocessing
@@ -210,16 +212,34 @@ class LongConspectPipeline(Trackable):
     def _call_synthesizer(self, path: str | PathLike) -> str | PathLike:
         """
         Запускает AgentSynthesizer (LongWriter) для синтеза финального конспекта.
-        Вход (path): Путь к сжатым мини-конспектам (результат _call_compression).
-        Выход: Путь к итоговому файлу конспекта в формате Markdown.
         """
-        with AgentSynthesizer(
-            init_config=self.synthesizer_init_config,
-            gen_config=self.synthesizer_gen_config,
-            app_config=self.synthesizer_app_config,
-        ) as synthesizer:
-            new_path = synthesizer.run(path)
-            return new_path
+        backend = getattr(self.synthesizer_app_config, "backend", "llamacpp")
+
+        if backend == "llamacpp":
+            logger.info("Запуск Синтезатора через Llama.cpp (Оптимальный режим)")
+            from src.agents.agent_synthesizer import AgentSynthesizerLlama
+
+            with AgentSynthesizerLlama(
+                init_config=self.synthesizer_init_config,
+                gen_config=self.synthesizer_gen_config,
+                app_config=self.synthesizer_app_config,
+            ) as synthesizer:
+                new_path = synthesizer.run(path)
+
+        elif backend == "transformers":
+            logger.info("Запуск Синтезатора через Transformers (Режим совместимости)")
+            from src.agents.agent_synthesizer import AgentSynthesizerTransformers
+
+            with AgentSynthesizerTransformers(
+                init_config=self.synthesizer_init_config,
+                gen_config=self.synthesizer_gen_config,
+                app_config=self.synthesizer_app_config,
+            ) as synthesizer:
+                new_path = synthesizer.run(path)
+        else:
+            raise ValueError(f"Неизвестный бэкенд для Синтезатора: {backend}")
+
+        return new_path
 
     # Hallucination Detection: У них реализован отдельный многослойный модуль детекции галлюцинаций (синтаксический, семантический и entailment-check).
     # Это то, чего пока не хватает в пайплайне. Малые модели (1.5B/3B) любят придумывать формулы.
@@ -260,3 +280,10 @@ class LongConspectPipeline(Trackable):
 
 
 # ROUGE для тестов обязательно
+# Где ROUGE работает отлично: На этапе AgentDrafter. Ты можешь взять сырой кусок транскрипта и сжатый драфт, и посмотреть ROUGE-L
+# (насколько сохранились ключевые последовательности слов).
+
+# Где ROUGE провалится: На этапе AgentSynthesizer. Синтезатор переписывает разговорный текст в академический, меняя структуру предложений, переводя слова в математику.
+# Если ты сравнишь текст препода с академическим финалом через ROUGE, скор будет на дне, хотя конспект может быть идеальным по смыслу.
+
+# Для оценки финального конспекта в GenAI сейчас используют LLM-as-a-Judge

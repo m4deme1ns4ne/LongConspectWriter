@@ -25,10 +25,27 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
-def load_configs(yaml_path, cls_init_config, cls_gen_config, cls_app_config):
+def load_configs(
+    yaml_path, cls_init_config=None, cls_gen_config=None, cls_app_config=None
+):
     with open(yaml_path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
 
+    if (
+        cls_init_config is None
+        and cls_gen_config is None
+        and cls_app_config is not None
+    ):
+        app_config = cls_app_config(**config["app_config"])
+        return app_config
+    elif (
+        cls_init_config is not None
+        and cls_gen_config is not None
+        and cls_app_config is None
+    ):
+        init_config = cls_init_config(**config["init_config"])
+        gen_config = cls_gen_config(**config["gen_config"])
+        return init_config, gen_config
     init_config = cls_init_config(**config["init_config"])
     gen_config = cls_gen_config(**config["gen_config"])
     app_config = cls_app_config(**config["app_config"])
@@ -109,13 +126,28 @@ def main() -> None:
             AppLLMConfig,
         )
 
-        # 3. Загрузка Synthesizer (LlamaCpp)
-        synth_init, synth_gen, synth_app = load_configs(
-            "src/configs/config-agents/synthesizer/config_synthesizer.yaml",
-            LlamaCppInitConfig,
-            LlamaCppGenConfig,
-            AppLLMConfig,
+        # 3. Загрузка Synthesizer (LlamaCpp или Transformers)
+        synth_app = load_configs(
+            yaml_path="src/configs/config-agents/synthesizer/config_synthesizer.yaml",
+            cls_app_config=AppLLMConfig,
         )
+
+        backend = getattr(synth_app, "backend", "llamacpp")
+
+        if backend == "transformers":
+            synth_init, synth_gen = load_configs(
+                "src/configs/config-agents/synthesizer/config_synthesizer.yaml",
+                cls_init_config=TransformersLLMInitConfig,
+                cls_gen_config=TransformersLLMGenConfig,
+            )
+        elif backend == "llamacpp":
+            synth_init, synth_gen = load_configs(
+                "src/configs/config-agents/synthesizer/config_synthesizer.yaml",
+                cls_init_config=LlamaCppInitConfig,
+                cls_gen_config=LlamaCppGenConfig,
+            )
+        else:
+            raise ValueError(f"Неизвестный бэкенд для Синтезатора: {backend}")
 
         # 4. Загрузка Local Planner (Transformers)
         lp_init, lp_gen, lp_app = load_configs(
