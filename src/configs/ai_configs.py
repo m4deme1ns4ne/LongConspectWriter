@@ -45,7 +45,7 @@ class AppSTTConfig:
 
 
 @dataclass
-class LLMInitConfig:
+class TransformersLLMInitConfig:
     pretrained_model_name_or_path: str
     torch_dtype: torch.dtype | None = None
     device_map: dict[str, int] | str | None = None
@@ -67,11 +67,12 @@ class LLMInitConfig:
 
 
 @dataclass
-class LLMGenConfig:
+class TransformersLLMGenConfig:
     max_new_tokens: int
     repetition_penalty: float | None = None
     temperature: float | None = None
     top_p: float | None = None
+    top_k: int | None = None
     do_sample: bool | None = False
     guidance_scale: float | None = None
 
@@ -81,3 +82,20 @@ class AppLLMConfig:
     agent_name: str
     prompt_path: str | PathLike
     output_dir: str | PathLike
+
+
+@dataclass
+class LlamaCppInitConfig:
+    model_path: str
+    n_gpu_layers: int = -1
+    n_ctx: int = 8192
+    verbose: bool = False
+
+
+@dataclass
+class LlamaCppGenConfig:
+    max_tokens: int
+    repeat_penalty: float | None = None
+    temperature: float | None = None
+    top_p: float | None = None
+    top_k: int | None = None

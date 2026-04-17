@@ -2,12 +2,19 @@ from abc import ABC, abstractmethod
 from loguru import logger
 from src.core.vram_manager import VRamCleaner
 from src.core.utils import log_execution_time, LoadPrompts, log_retry_attempt
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from src.configs.ai_configs import AppLLMConfig, LLMGenConfig, LLMInitConfig
+from src.configs.ai_configs import (
+    AppLLMConfig,
+    TransformersLLMGenConfig,
+    TransformersLLMInitConfig,
+    LlamaCppInitConfig,
+    LlamaCppGenConfig,
+)
 from dataclasses import asdict
-import torch
 from tenacity import retry, stop_after_attempt, wait_fixed
+from typing import Any
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation.streamers import BaseStreamer
+from llama_cpp import Llama
 
 
 class Trackable:
@@ -27,7 +34,7 @@ class Base(ABC):
     """
 
     @abstractmethod
-    def run(self) -> object:
+    def run(self) -> str:
         pass
 
 
@@ -56,21 +63,22 @@ class BaseLLMAgent(BaseAgent):
     """
 
     @abstractmethod
-    def _generate(self) -> str:
+    def _generate(self, prompt: Any, **kwargs) -> str:
         pass
 
     @abstractmethod
-    def _build_prompt(self) -> str:
+    def _build_prompt(self) -> Any:
         pass
 
 
 class BaseTransformersAgent(BaseLLMAgent):
     def __init__(
         self,
-        init_config: LLMInitConfig,
-        gen_config: LLMGenConfig,
+        init_config: TransformersLLMInitConfig,
+        gen_config: TransformersLLMGenConfig,
         app_config: AppLLMConfig,
     ) -> None:
+
         self._init_config = init_config
         self._gen_config = gen_config
         self._app_config = app_config
@@ -108,7 +116,7 @@ class BaseTransformersAgent(BaseLLMAgent):
             )
         elif self.negative_prompt and self._gen_config.guidance_scale <= 1.0:
             logger.warning(
-                f"Негативный промпт обнаружен но не загружен для агента: {self.__class__.__name__}, так как guidance_scale == {self._gen_config.guidance_scale}"
+                f"Негативный промпт обнаружен но не загружен для агента: {self.__class__.__name__}, так как guidance_scale: {self._gen_config.guidance_scale}"
             )
         else:
             logger.warning(
@@ -145,9 +153,11 @@ class BaseTransformersAgent(BaseLLMAgent):
     def _generate(
         self,
         prompt: str,
-        streamer: BaseStreamer | None = None,
+        streamer: BaseStreamer | None = None,  # type: ignore
         bad_words_ids: list[list[int]] | None = None,
     ) -> str:
+        import torch
+
         model_inputs = self.tokenizer([prompt], return_tensors="pt").to(
             self.model.device
         )
@@ -159,7 +169,7 @@ class BaseTransformersAgent(BaseLLMAgent):
             )
         else:
             negative_prompt_ids = None
-        with torch.no_grad():
+        with torch.no_grad():  # type: ignore
             output = self.model.generate(
                 **model_inputs,
                 **asdict(self._gen_config),
@@ -175,6 +185,74 @@ class BaseTransformersAgent(BaseLLMAgent):
         response = self.tokenizer.batch_decode(output, skip_special_tokens=True)[0]
 
         return response
+
+
+class BaseLlamaCppAgent(BaseLLMAgent):
+    def __init__(
+        self,
+        init_config: LlamaCppInitConfig,
+        gen_config: LlamaCppGenConfig,
+        app_config: AppLLMConfig,
+    ) -> None:
+        self._init_config = init_config
+        self._gen_config = gen_config
+        self._app_config = app_config
+        logger.info(
+            f"Инициализация {self.__class__.__name__} (Модель: {self._init_config.model_path})"
+        )
+
+        logger.info(f"Загрузка {self._init_config.model_path} в память...")
+        self.model = Llama(**asdict(self._init_config))
+        logger.info(f"Модель {self._init_config.model_path} загружена.")
+
+        self.prompts = LoadPrompts.load_prompts(self._app_config.prompt_path)
+        self.system_prompt = self.prompts[self._app_config.agent_name]["system_prompt"]
+        self.user_template = self.prompts[self._app_config.agent_name]["user_template"]
+
+        logger.debug(
+            f"Параметры запуска агента {self.__class__.__name__}: {self._init_config}"
+        )
+        logger.debug(
+            f"Параметры генерации агента {self.__class__.__name__}: {self._gen_config}"
+        )
+        logger.debug(
+            f"Параметры использования агента {self.__class__.__name__}: {self._app_config}"
+        )
+
+    def _build_prompt(self, **kwargs) -> list[dict[str]]:
+        user_prompt = self.user_template.format(**kwargs)
+        return [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(5),
+        before_sleep=log_retry_attempt,
+        reraise=True,
+    )
+    def _generate(
+        self, prompt: list[dict[str, str]], stream: bool = False, token_pbar: Any = None
+    ) -> str:
+        if stream:
+            response_text = ""
+            generator = self.model.create_chat_completion(
+                messages=prompt, stream=True, **asdict(self._gen_config)
+            )
+            for chunk in generator:
+                delta = chunk["choices"][0]["delta"]
+                if "content" in delta:
+                    text_chunk = delta["content"]
+                    response_text += text_chunk
+                    if token_pbar:
+                        token_pbar.update(1)
+            return response_text
+        else:
+            response = self.model.create_chat_completion(
+                messages=prompt, stream=False, **asdict(self._gen_config)
+            )
+            return response["choices"][0]["message"]["content"]
 
 
 class BaseSTTAgent(BaseAgent):
