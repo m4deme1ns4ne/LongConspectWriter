@@ -17,3 +17,4 @@ app_config:
   agent_name: "synthesizer"
   prompt_path: "src/configs/config-agents/synthesizer/prompt_synthesizer.yaml"
   output_dir: "data/example-conspect"
+  backend: "llamacpp" # или "transformers"
