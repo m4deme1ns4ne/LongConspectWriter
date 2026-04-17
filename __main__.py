@@ -1,4 +1,4 @@
-from src.core.pipeline import ConspectiusPipeline
+from src.core.pipeline import LongConspectPipeline
 from loguru import logger
 from dotenv import load_dotenv
 import os
@@ -8,10 +8,12 @@ import argparse
 from src.configs.ai_configs import (
     AppLLMConfig,
     AppSTTConfig,
-    LLMGenConfig,
-    LLMInitConfig,
+    LlamaCppGenConfig,
+    LlamaCppInitConfig,
     STTGenConfig,
     STTInitConfig,
+    TransformersLLMInitConfig,
+    TransformersLLMGenConfig,
 )
 from tqdm import tqdm
 import warnings
@@ -23,47 +25,15 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
-def load_pipeline_configs(yaml_path):
+def load_configs(yaml_path, cls_init_config, cls_gen_config, cls_app_config):
     with open(yaml_path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
 
-    stt_init_config = STTInitConfig(**config["stt_init_config"])
-    stt_gen_config = STTGenConfig(**config["stt_gen_config"])
-    stt_app_config = AppSTTConfig(**config["stt_app_config"])
+    init_config = cls_init_config(**config["init_config"])
+    gen_config = cls_gen_config(**config["gen_config"])
+    app_config = cls_app_config(**config["app_config"])
 
-    drafter_init = LLMInitConfig(**config["drafter_init_config"])
-    drafter_gen = LLMGenConfig(**config["drafter_gen_config"])
-    drafter_app = AppLLMConfig(**config["drafter_app_config"])
-
-    synth_init = LLMInitConfig(**config["synthesizer_init_config"])
-    synth_gen = LLMGenConfig(**config["synthesizer_gen_config"])
-    synth_app = AppLLMConfig(**config["synthesizer_app_config"])
-
-    local_planner_init = LLMInitConfig(**config["local_planner_init_config"])
-    local_planner_gen = LLMGenConfig(**config["local_planner_gen_config"])
-    local_planner_app = AppLLMConfig(**config["local_planner_app_config"])
-
-    global_planner_init = LLMInitConfig(**config["global_planner_init_config"])
-    global_planner_gen = LLMGenConfig(**config["global_planner_gen_config"])
-    global_planner_app = AppLLMConfig(**config["global_planner_app_config"])
-
-    return (
-        stt_init_config,
-        stt_gen_config,
-        stt_app_config,
-        drafter_init,
-        drafter_gen,
-        drafter_app,
-        synth_init,
-        synth_gen,
-        synth_app,
-        local_planner_init,
-        local_planner_gen,
-        local_planner_app,
-        global_planner_init,
-        global_planner_gen,
-        global_planner_app,
-    )
+    return (init_config, gen_config, app_config)
 
 
 def main() -> None:
@@ -123,12 +93,66 @@ def main() -> None:
     args = parser.parse_args()
     action = args.action
     if args.config_path is None:
-        config = load_pipeline_configs(Path("src") / "configs" / "config.yaml")
+        # 1. Загрузка STT
+        stt_init, stt_gen, stt_app = load_configs(
+            "src/configs/config-agents/stt/config_stt.yaml",
+            STTInitConfig,
+            STTGenConfig,
+            AppSTTConfig,
+        )
+
+        # 2. Загрузка Drafter (Transformers)
+        drafter_init, drafter_gen, drafter_app = load_configs(
+            "src/configs/config-agents/drafter/config_drafter.yaml",
+            TransformersLLMInitConfig,
+            TransformersLLMGenConfig,
+            AppLLMConfig,
+        )
+
+        # 3. Загрузка Synthesizer (LlamaCpp)
+        synth_init, synth_gen, synth_app = load_configs(
+            "src/configs/config-agents/synthesizer/config_synthesizer.yaml",
+            LlamaCppInitConfig,
+            LlamaCppGenConfig,
+            AppLLMConfig,
+        )
+
+        # 4. Загрузка Local Planner (Transformers)
+        lp_init, lp_gen, lp_app = load_configs(
+            "src/configs/config-agents/local_planner/config_local_planner.yaml",
+            TransformersLLMInitConfig,
+            TransformersLLMGenConfig,
+            AppLLMConfig,
+        )
+
+        # 5. Загрузка Global Planner (Transformers)
+        gp_init, gp_gen, gp_app = load_configs(
+            "src/configs/config-agents/global_planner/config_global_planner.yaml",
+            TransformersLLMInitConfig,
+            TransformersLLMGenConfig,
+            AppLLMConfig,
+        )
+
+        pipeline = LongConspectPipeline(
+            stt_init,
+            stt_gen,
+            stt_app,
+            drafter_init,
+            drafter_gen,
+            drafter_app,
+            synth_init,
+            synth_gen,
+            synth_app,
+            lp_init,
+            lp_gen,
+            lp_app,
+            gp_init,
+            gp_gen,
+            gp_app,
+        )
     else:
-        config = load_pipeline_configs(Path(args.config_path))
-
-    pipeline_conspectius = ConspectiusPipeline(*config)
-
+        ...
+        # Архитектура с разными конфигами пока не реализованна
     if action == "global_clustering":
         if args.global_plan_path is None:
             logger.critical("Аргумент --global_plan_path не передан при запуске.")
@@ -150,7 +174,7 @@ def main() -> None:
             )
             return
 
-        output_path = pipeline_conspectius._call_global_clustering(
+        output_path = pipeline._call_global_clustering(
             global_plan_path, local_clusters_path
         )
 
@@ -161,31 +185,31 @@ def main() -> None:
             return
 
         if action == "all":
-            output_path = pipeline_conspectius.run(path_to_file)
+            output_path = pipeline.run(path_to_file)
 
         elif action == "stt":
-            output_path = pipeline_conspectius._call_stt(path_to_file)
+            output_path = pipeline._call_stt(path_to_file)
 
         elif action == "drafter":
-            output_path = pipeline_conspectius._call_drafter(path_to_file)
+            output_path = pipeline._call_drafter(path_to_file)
 
         elif action == "synthesizer":
-            output_path = pipeline_conspectius._call_synthesizer(path_to_file)
+            output_path = pipeline._call_synthesizer(path_to_file)
 
         elif action == "planner":
-            output_path = pipeline_conspectius._call_planner(path_to_file)
+            output_path = pipeline._call_planner(path_to_file)
 
         elif action == "local_planner":
-            output_path = pipeline_conspectius._call_local_planner(path_to_file)
+            output_path = pipeline._call_local_planner(path_to_file)
 
         elif action == "global_planner":
-            output_path = pipeline_conspectius._call_global_planner(path_to_file)
+            output_path = pipeline._call_global_planner(path_to_file)
 
         elif action == "local_clustering":
-            output_path = pipeline_conspectius._call_local_clustering(path_to_file)
+            output_path = pipeline._call_local_clustering(path_to_file)
 
         elif action == "clustering":
-            output_path = pipeline_conspectius._call_clustering(path_to_file)
+            output_path = pipeline._call_clustering(path_to_file)
 
     if output_path is not None:
         logger.info("Работа завершена.")

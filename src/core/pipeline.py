@@ -8,10 +8,12 @@ from src.core.base import Trackable
 from src.core.utils import check_path_is
 from pathlib import Path
 from src.core.convert_json_to_md import convert_json_to_md
+from loguru import logger
+import multiprocessing
 
 
 # Раздутый init потом поменять просто на датакласс
-class ConspectiusPipeline(Trackable):
+class LongConspectPipeline(Trackable):
     def __init__(
         self,
         stt_init_config,
@@ -50,14 +52,54 @@ class ConspectiusPipeline(Trackable):
         self.global_planner_gen_config = global_planner_gen_config
         self.global_planner_app_config = global_planner_app_config
 
-    @check_path_is
-    def _call_stt(self, path: Path) -> Path | None:
-        with FasterWhisper(
-            self.stt_init_config, self.stt_gen_config, self.stt_app_config
-        ) as model:
-            result_path = model.run(audio_file_path=path)
+    # @check_path_is
+    # def _call_stt(self, path: Path) -> Path | None:
+    #     with FasterWhisper(
+    #         self.stt_init_config, self.stt_gen_config, self.stt_app_config
+    #     ) as model:
+    #         result_path = model.run(audio_file_path=path)
 
-        return result_path
+    #     return result_path
+
+    def _run_stt_process(
+        self, path: str | PathLike, result_queue: multiprocessing.Queue
+    ) -> None:
+        try:
+            faster_whisper = FasterWhisper(
+                init_config=self.stt_init_config,
+                gen_config=self.stt_gen_config,
+                app_config=self.stt_app_config,
+            )
+            transcript_path = faster_whisper.run(audio_file_path=path)
+            result_queue.put({"status": "success", "path": transcript_path})
+        except Exception as e:
+            result_queue.put({"status": "error", "error": str(e)})
+
+    def _call_stt(self, path: str | PathLike) -> str:
+        """
+        Запускает модель транскрибации (FasterWhisper).
+        Вход (path): Путь к исходному аудио или видео файлу.
+        Выход: Путь к текстовому файлу (.txt) с сырой транскрипцией.
+        """
+        logger.info("Запуск STT агента в изолированном процессе...")
+        result_queue = multiprocessing.Queue()
+        process = multiprocessing.Process(
+            target=self._run_stt_process, args=(path, result_queue)
+        )
+        process.start()
+        process.join()
+        if not result_queue.empty():
+            result = result_queue.get()
+            if result["status"] == "success":
+                return result["path"]
+            else:
+                raise RuntimeError(
+                    f"Ошибка транскрибации в фоновом процессе: {result['error']}"
+                )
+        else:
+            raise RuntimeError(
+                "Процесс STT завершился, но не вернул результат. Возможно, произошло жесткое падение CTranslate2."
+            )
 
     @check_path_is
     def _call_drafter(self, path: str | PathLike) -> str | PathLike | None:
@@ -210,3 +252,11 @@ class ConspectiusPipeline(Trackable):
         )
 
         return final_conspect_path
+
+
+# Нужно теперь улучшать качество, для этого нужно добавить нормальные пути
+# типо, создаем папку и там пишем stage
+# Каждый в своем файле но главное это промеж этапы
+
+
+# ROUGE для тестов обязательно
