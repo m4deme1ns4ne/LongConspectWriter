@@ -4,7 +4,7 @@
 
 Research MVP for generating structured academic notes from long lecture audio.
 
-The project uses a local multi-stage pipeline instead of a single giant prompt. Long, noisy lecture transcripts are processed step by step: transcription, transcript cleaning, semantic grouping, structure planning, topic matching, final long-form synthesis, and Markdown export of the last JSON result.
+The project uses a local multi-stage pipeline. Long, noisy lecture transcripts are processed step by step: transcription, transcript cleaning, semantic grouping, structure planning, topic matching, final long-form synthesis, and Markdown export of the last JSON result. The stack is hybrid: `faster-whisper` is used for STT, Transformers are used for Drafter and the planners, while Synthesizer can run either through `llama_cpp` on a local GGUF model or through a Transformers compatibility backend.
 
 ## What Works Now
 
@@ -13,7 +13,8 @@ The project uses a local multi-stage pipeline instead of a single giant prompt. 
 - local semantic clustering
 - local and global planning
 - global topic assignment
-- final JSON conspect generation with `Synthesizer` and Markdown export
+- final JSON conspect generation with `Synthesizer` on a local GGUF model or in Transformers compatibility mode
+- Markdown export of the final JSON draft
 
 This is a working research MVP, not a finished product.
 
@@ -26,7 +27,7 @@ Main `all` flow:
 In the current version:
 
 - `Drafter` cleans raw transcript noise before downstream processing and keeps only fragments with academic content
-- `Synthesizer` works topic by topic, can split large topic clusters into smaller chunks, and produces the final structured JSON draft
+- `Synthesizer` works topic by topic, can split large topic clusters into smaller chunks, and produces the final structured JSON draft through the selected backend
 - the final JSON draft is converted into a Markdown conspect at the end of the pipeline
 - intermediate artifacts are saved to disk for inspection and debugging
 
@@ -38,6 +39,7 @@ The project is currently aimed at:
 - STEM / technical subjects
 - local inference with limited VRAM
 - long-form academic note generation instead of short summarization
+- a mixed backend setup with Transformers and a local GGUF-based synthesizer
 
 ## Quick Start
 
@@ -57,12 +59,6 @@ uv sync
 
 ```bash
 uv run python __main__.py --action all --path_to_file "data/example-audio/your_lecture.mp3"
-```
-
-If you want to use a custom config, pass:
-
-```bash
-uv run python __main__.py --action all --path_to_file "data/example-audio/your_lecture.mp3" --config_path "src/configs/config.yaml"
 ```
 
 ### Run individual stages
@@ -95,9 +91,14 @@ uv run python __main__.py --action synthesizer --path_to_file "data/example-clus
 
 Main config files:
 
-- `src/configs/config.yaml`
-- `src/configs/prompts.yaml`
+- `src/configs/config-agents/stt/config_stt.yaml`
+- `src/configs/config-agents/drafter/config_drafter.yaml`
+- `src/configs/config-agents/local_planner/config_local_planner.yaml`
+- `src/configs/config-agents/global_planner/config_global_planner.yaml`
+- `src/configs/config-agents/synthesizer/config_synthesizer.yaml`
+- `src/configs/config-agents/*/prompt_*.yaml`
 - `src/configs/bad_words.py`
+- `src/configs/ai_configs.py`
 
 You can change:
 
@@ -107,7 +108,7 @@ You can change:
 - output directories
 - STT options
 - blocked phrases for generation cleanup
-- CLI config path via `--config_path`
+- `Synthesizer` backend selection and model path in `src/configs/config-agents/synthesizer/config_synthesizer.yaml`
 
 ## Project Structure
 
@@ -115,7 +116,7 @@ You can change:
 src/
   agents/      # Drafter, Planner, Synthesizer
   core/        # base abstractions, pipeline, STT, clustering, utils
-  configs/     # model configs, prompts, bad words
+  configs/     # ai_configs, bad_words, config-agents
   tests/       # test placeholders and test configs
 
 data/
@@ -125,6 +126,9 @@ data/
   example-clusters/
   example-plan/
   example-conspect/
+
+.models/
+  # local GGUF models for llama_cpp
 ```
 
 ## Saved Artifacts
@@ -167,6 +171,7 @@ Placeholder for:
 - still sensitive to transcript quality
 - not packaged as a user-facing application yet
 - evaluation is still manual / research-oriented
+- the Synthesizer defaults to a local GGUF backend, with a Transformers fallback for compatibility
 - final Markdown export is a simple formatter over the generated JSON, so malformed upstream output can still affect the result
 
 ## Citation

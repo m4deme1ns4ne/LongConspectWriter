@@ -4,7 +4,7 @@
 
 Исследовательский MVP для генерации структурированного академического конспекта из длинной аудиозаписи лекции.
 
-Проект использует локальный многоэтапный пайплайн вместо одного огромного промпта. Длинная и шумная лекционная транскрипция обрабатывается по шагам: транскрибация, очистка текста, семантическая группировка, планирование структуры, привязка тем, финальный синтез и экспорт результата в Markdown.
+Проект использует локальный многоэтапный пайплайн. Длинная и шумная лекционная транскрипция обрабатывается по шагам: транскрибация, очистка текста, семантическая группировка, планирование структуры, привязка тем, финальный синтез и экспорт результата в Markdown. Стек гибридный: `faster-whisper` используется для `STT`, `Transformers` используются для `Drafter` и планировщиков, а `Synthesizer` может работать либо через `llama_cpp` на локальной `GGUF`-модели, либо через совместимый бэкенд `Transformers`.
 
 ## Что уже работает
 
@@ -13,7 +13,7 @@
 - локальная семантическая кластеризация
 - локальный и глобальный planner
 - привязка кластеров к глобальным темам
-- генерация финального JSON-черновика через `Synthesizer`
+- генерация финального JSON-черновика через `Synthesizer` на локальной `GGUF`-модели или в режиме совместимости через `Transformers`
 - преобразование финального JSON в Markdown-конспект
 
 Это рабочий исследовательский MVP, а не законченный продукт.
@@ -29,6 +29,7 @@
 - `Drafter` сначала очищает сырую транскрипцию от шума
 - `Drafter` старается оставлять только фрагменты, где есть хотя бы одна полезная предметная мысль
 - `Synthesizer` работает по темам и при необходимости режет большие кластеры на более мелкие куски
+- `Synthesizer` пишет финальный JSON-черновик через выбранный бэкенд
 - финальный JSON-черновик автоматически переводится в Markdown в конце пайплайна
 - промежуточные артефакты сохраняются на диск для просмотра и отладки
 
@@ -38,6 +39,7 @@
 - STEM / технические дисциплины
 - локальный запуск при ограниченном VRAM
 - генерация длинного академического конспекта, а не короткой summary
+- гибридная схема, где часть агентов работает через `Transformers`, а `Synthesizer` выбирает между `llama_cpp` и `Transformers`
 
 ## Быстрый старт
 
@@ -57,12 +59,6 @@ uv sync
 
 ```bash
 uv run python __main__.py --action all --path_to_file "data/example-audio/your_lecture.mp3"
-```
-
-Если нужен свой конфиг, можно явно передать путь:
-
-```bash
-uv run python __main__.py --action all --path_to_file "data/example-audio/your_lecture.mp3" --config_path "src/configs/config.yaml"
 ```
 
 ### Запуск отдельных этапов
@@ -95,9 +91,14 @@ uv run python __main__.py --action synthesizer --path_to_file "data/example-clus
 
 Основные конфиги лежат здесь:
 
-- `src/configs/config.yaml`
-- `src/configs/prompts.yaml`
+- `src/configs/config-agents/stt/config_stt.yaml`
+- `src/configs/config-agents/drafter/config_drafter.yaml`
+- `src/configs/config-agents/local_planner/config_local_planner.yaml`
+- `src/configs/config-agents/global_planner/config_global_planner.yaml`
+- `src/configs/config-agents/synthesizer/config_synthesizer.yaml`
+- `src/configs/config-agents/*/prompt_*.yaml`
 - `src/configs/bad_words.py`
+- `src/configs/ai_configs.py`
 
 Через них можно менять:
 
@@ -107,7 +108,7 @@ uv run python __main__.py --action synthesizer --path_to_file "data/example-clus
 - выходные директории
 - настройки STT
 - списки нежелательных фраз для очистки генерации
-- путь к конфигу через `--config_path`
+- выбор бэкенда `Synthesizer` и путь к модели в `src/configs/config-agents/synthesizer/config_synthesizer.yaml`
 
 ## Структура проекта
 
@@ -115,7 +116,7 @@ uv run python __main__.py --action synthesizer --path_to_file "data/example-clus
 src/
   agents/      # Drafter, Planner, Synthesizer
   core/        # базовые абстракции, pipeline, STT, clustering, utils
-  configs/     # конфиги моделей, промпты, bad words
+  configs/     # ai_configs, bad_words, config-agents
   tests/       # Tесты и тестовые конфиги
 
 data/
@@ -125,6 +126,9 @@ data/
   example-clusters/
   example-plan/
   example-conspect/
+
+.models/
+  # локальные GGUF-модели для llama_cpp
 ```
 
 ## Какие артефакты сохраняются
@@ -165,6 +169,7 @@ data/
 - всё ещё чувствителен к качеству транскрипции
 - пока не упакован как пользовательское приложение
 - оценка качества пока в основном ручная / исследовательская
+- по умолчанию `Synthesizer` использует локальный `GGUF`-бэкенд, но есть и режим совместимости через `Transformers`
 - финальный Markdown — это простое преобразование сгенерированного JSON, поэтому ошибки на предыдущих стадиях всё ещё могут влиять на результат
 
 ## Цитирование
@@ -182,4 +187,4 @@ data/
 
 ## Лицензия
 
-Сейчас проект использует [MIT License](LICENSE).
+Проект использует [MIT License](LICENSE).
