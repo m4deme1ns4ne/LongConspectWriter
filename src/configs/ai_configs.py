@@ -45,46 +45,6 @@ class AppSTTConfig:
 
 
 @dataclass
-class TransformersLLMInitConfig:
-    pretrained_model_name_or_path: str
-    torch_dtype: torch.dtype | None = None
-    device_map: dict[str, int] | str | None = None
-    trust_remote_code: bool = False
-    attn_implementation: str | None = None
-    quantization_config: dict[str, object] | None = None
-
-    def __post_init__(self) -> None:
-        if self.device_map is None:
-            self.device_map = {"": 0} if torch.cuda.is_available() else "cpu"
-
-        if self.torch_dtype is None:
-            self.torch_dtype = (
-                torch.bfloat16 if torch.cuda.is_available() else torch.float32
-            )
-
-        if isinstance(self.quantization_config, dict):
-            self.quantization_config["bnb_4bit_compute_dtype"] = self.torch_dtype
-
-
-@dataclass
-class TransformersLLMGenConfig:
-    max_new_tokens: int
-    repetition_penalty: float | None = None
-    temperature: float | None = None
-    top_p: float | None = None
-    top_k: int | None = None
-    do_sample: bool | None = False
-    guidance_scale: float | None = None
-
-
-@dataclass
-class AppLLMConfig:
-    agent_name: str
-    prompt_path: str | PathLike
-    output_dir: str | PathLike
-
-
-@dataclass
 class LlamaCppInitConfig:
     model_path: str
     n_gpu_layers: int = -1
@@ -99,3 +59,10 @@ class LlamaCppGenConfig:
     temperature: float | None = None
     top_p: float | None = None
     top_k: int | None = None
+
+
+@dataclass
+class AppLLMConfig:
+    agent_name: str
+    prompt_path: str | PathLike
+    output_dir: str | PathLike

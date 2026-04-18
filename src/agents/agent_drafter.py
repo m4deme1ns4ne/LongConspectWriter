@@ -4,14 +4,13 @@ from tqdm import tqdm
 import os
 import sys
 from src.core.utils import (
-    TqdmTokenStreamer,
     TextsSplitter,
 )
-from src.core.base import BaseTransformersAgent
+from src.core.base import BaseLlamaCppAgent
 from pathlib import Path
 
 
-class AgentDrafter(BaseTransformersAgent):
+class AgentDrafterLlama(BaseLlamaCppAgent):
     def __init__(self, init_config, gen_config, app_config):
         super().__init__(init_config, gen_config, app_config)
 
@@ -19,7 +18,7 @@ class AgentDrafter(BaseTransformersAgent):
         with open(path_transcrib, "r", encoding="utf-8") as file:
             transcrib: str = file.read()
 
-        token_count = len(self.tokenizer.encode(transcrib, add_special_tokens=False))
+        token_count = len(self.model.tokenize(transcrib.encode("utf-8")))
 
         len_original_sentences = len(TextsSplitter.split_text_to_sentences(transcrib))
 
@@ -28,8 +27,8 @@ class AgentDrafter(BaseTransformersAgent):
 
         transcrib_chunks = TextsSplitter.split_text_to_tokens(
             text=transcrib,
-            model_name=self._init_config.pretrained_model_name_or_path,
-            chunk_size=int(self._gen_config.max_new_tokens * 0.85),
+            tokenizer=self.model.tokenize,
+            chunk_size=int(self._gen_config.max_tokens * 0.85),
             chunk_overlap=0,
         )
 
@@ -50,7 +49,7 @@ class AgentDrafter(BaseTransformersAgent):
         ) as pbar:
             for chunk in transcrib_chunks:
                 with tqdm(
-                    total=self._gen_config.max_new_tokens,
+                    total=self._gen_config.max_tokens,
                     desc="Генерация токенов",
                     unit="токен",
                     colour="blue",
@@ -59,12 +58,12 @@ class AgentDrafter(BaseTransformersAgent):
                     file=sys.stdout,
                     dynamic_ncols=True,
                 ) as token_pbar:
-                    streamer = TqdmTokenStreamer(token_pbar)
                     response = self._generate(
                         prompt=self._build_prompt(
                             chunk=chunk, previous_context=previous_context
                         ),
-                        streamer=streamer,
+                        stream=True,
+                        token_pbar=token_pbar,
                     )
                 pbar.update(1)
                 response = response.strip()
@@ -73,12 +72,8 @@ class AgentDrafter(BaseTransformersAgent):
                     continue
                 response = response.replace("[NO_CONTEXT]", "").strip()
 
-                orig_tokens = len(
-                    self.tokenizer.encode(chunk, add_special_tokens=False)
-                )
-                clean_tokens = len(
-                    self.tokenizer.encode(response, add_special_tokens=False)
-                )
+                orig_tokens = len(self.model.tokenize(chunk.encode("utf-8")))
+                clean_tokens = len(self.model.tokenize(response.encode("utf-8")))
 
                 compression_ratio.append(
                     {"orig_tokens": orig_tokens, "clean_tokens": clean_tokens}
@@ -102,9 +97,7 @@ class AgentDrafter(BaseTransformersAgent):
                     f"Чанк {i}: {orig_tokens} -> {clean_tokens} токенов | Сжатие: {compression:.1f}%"
                 )
 
-        safe_model_name = self._init_config.pretrained_model_name_or_path.replace(
-            "/", "_"
-        )
+        safe_model_name = self._init_config.model_path.replace("/", "_")
 
         pure_transcrib_file_name = os.path.basename(path_transcrib)
 
@@ -122,15 +115,13 @@ class AgentDrafter(BaseTransformersAgent):
         if ignored_chunks:
             logger.debug(
                 f"Пропущено пустых чанков: {ignored_chunks}, потенциальная экономия: "
-                f"{ignored_chunks * self._gen_config.max_new_tokens} токенов."
+                f"{ignored_chunks * self._gen_config.max_tokens} токенов."
             )
         else:
-            logger.debug(f"Пропущеных чанков не обнаружено.")
+            logger.debug("Пропущеных чанков не обнаружено.")
 
         len_final_drafts = len(TextsSplitter.split_text_to_sentences(final_drafts))
-        current_token_count = len(
-            self.tokenizer.encode(final_drafts, add_special_tokens=False)
-        )
+        current_token_count = len(self.model.tokenize(final_drafts.encode("utf-8")))
         difference_tokens = (
             token_count - current_token_count
             if token_count > current_token_count

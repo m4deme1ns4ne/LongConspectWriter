@@ -1,10 +1,14 @@
-from src.core.pipeline import LongConspectPipeline
-from loguru import logger
-from dotenv import load_dotenv
 import os
-from pathlib import Path
 import yaml
 import argparse
+from pathlib import Path
+import warnings
+
+from dotenv import load_dotenv
+from loguru import logger
+from tqdm import tqdm
+
+from src.core.pipeline import LongConspectPipeline
 from src.configs.ai_configs import (
     AppLLMConfig,
     AppSTTConfig,
@@ -12,45 +16,22 @@ from src.configs.ai_configs import (
     LlamaCppInitConfig,
     STTGenConfig,
     STTInitConfig,
-    TransformersLLMInitConfig,
-    TransformersLLMGenConfig,
 )
-from tqdm import tqdm
-import warnings
-import transformers
 
-transformers.logging.set_verbosity_error()
+# Оставляем только нужные системные фиксы, мусор от transformers удален
 warnings.filterwarnings("ignore", category=UserWarning)
-os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
-def load_configs(
-    yaml_path, cls_init_config=None, cls_gen_config=None, cls_app_config=None
-):
+def load_configs(yaml_path, cls_init_config, cls_gen_config, cls_app_config):
     with open(yaml_path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
 
-    if (
-        cls_init_config is None
-        and cls_gen_config is None
-        and cls_app_config is not None
-    ):
-        app_config = cls_app_config(**config["app_config"])
-        return app_config
-    elif (
-        cls_init_config is not None
-        and cls_gen_config is not None
-        and cls_app_config is None
-    ):
-        init_config = cls_init_config(**config["init_config"])
-        gen_config = cls_gen_config(**config["gen_config"])
-        return init_config, gen_config
-    init_config = cls_init_config(**config["init_config"])
-    gen_config = cls_gen_config(**config["gen_config"])
-    app_config = cls_app_config(**config["app_config"])
+    init_config = cls_init_config(**config.get("init_config", {}))
+    gen_config = cls_gen_config(**config.get("gen_config", {}))
+    app_config = cls_app_config(**config.get("app_config", {}))
 
-    return (init_config, gen_config, app_config)
+    return init_config, gen_config, app_config
 
 
 def main() -> None:
@@ -109,6 +90,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     action = args.action
+
     if args.config_path is None:
         # 1. Загрузка STT
         stt_init, stt_gen, stt_app = load_configs(
@@ -118,53 +100,37 @@ def main() -> None:
             AppSTTConfig,
         )
 
-        # 2. Загрузка Drafter (Transformers)
+        # 2. Загрузка Drafter
         drafter_init, drafter_gen, drafter_app = load_configs(
             "src/configs/config-agents/drafter/config_drafter.yaml",
-            TransformersLLMInitConfig,
-            TransformersLLMGenConfig,
+            LlamaCppInitConfig,
+            LlamaCppGenConfig,
             AppLLMConfig,
         )
 
-        # 3. Загрузка Synthesizer (LlamaCpp или Transformers)
-        synth_app = load_configs(
-            yaml_path="src/configs/config-agents/synthesizer/config_synthesizer.yaml",
-            cls_app_config=AppLLMConfig,
+        # 3. Загрузка Synthesizer
+        synth_init, synth_gen, synth_app = load_configs(
+            "src/configs/config-agents/synthesizer/config_synthesizer.yaml",
+            LlamaCppInitConfig,
+            LlamaCppGenConfig,
+            AppLLMConfig,
         )
 
-        backend = getattr(synth_app, "backend", "llamacpp")
-
-        if backend == "transformers":
-            synth_init, synth_gen = load_configs(
-                "src/configs/config-agents/synthesizer/config_synthesizer.yaml",
-                cls_init_config=TransformersLLMInitConfig,
-                cls_gen_config=TransformersLLMGenConfig,
-            )
-        elif backend == "llamacpp":
-            synth_init, synth_gen = load_configs(
-                "src/configs/config-agents/synthesizer/config_synthesizer.yaml",
-                cls_init_config=LlamaCppInitConfig,
-                cls_gen_config=LlamaCppGenConfig,
-            )
-        else:
-            raise ValueError(f"Неизвестный бэкенд для Синтезатора: {backend}")
-
-        # 4. Загрузка Local Planner (Transformers)
+        # 4. Загрузка Local Planner
         lp_init, lp_gen, lp_app = load_configs(
             "src/configs/config-agents/local_planner/config_local_planner.yaml",
-            TransformersLLMInitConfig,
-            TransformersLLMGenConfig,
+            LlamaCppInitConfig,
+            LlamaCppGenConfig,
             AppLLMConfig,
         )
 
-        # 5. Загрузка Global Planner (Transformers)
+        # 5. Загрузка Global Planner
         gp_init, gp_gen, gp_app = load_configs(
             "src/configs/config-agents/global_planner/config_global_planner.yaml",
-            TransformersLLMInitConfig,
-            TransformersLLMGenConfig,
+            LlamaCppInitConfig,
+            LlamaCppGenConfig,
             AppLLMConfig,
         )
-
         pipeline = LongConspectPipeline(
             stt_init,
             stt_gen,
@@ -185,6 +151,7 @@ def main() -> None:
     else:
         ...
         # Архитектура с разными конфигами пока не реализованна
+
     if action == "global_clustering":
         if args.global_plan_path is None:
             logger.critical("Аргумент --global_plan_path не передан при запуске.")
@@ -192,8 +159,10 @@ def main() -> None:
         if args.local_clusters_path is None:
             logger.critical("Аргумент --local_clusters_path не передан при запуске.")
             return
+
         global_plan_path = Path(args.global_plan_path)
         local_clusters_path = Path(args.local_clusters_path)
+
         if not global_plan_path.is_file():
             logger.critical(
                 f"Файла {global_plan_path.name} не существует. Указанный путь до файла: {global_plan_path}"

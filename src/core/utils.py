@@ -1,7 +1,4 @@
 from loguru import logger
-from tqdm import tqdm
-from transformers.generation.streamers import BaseStreamer
-from transformers import AutoTokenizer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import yaml
 from os import PathLike
@@ -19,13 +16,12 @@ class TextsSplitter:
 
     @staticmethod
     def split_text_to_tokens(
-        text: str, model_name: str, chunk_size: int = 2000, chunk_overlap: int = 0
+        text: str, tokenizer: str, chunk_size: int = 2000, chunk_overlap: int = 0
     ) -> list[str]:
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-            tokenizer=tokenizer,
+        splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
+            length_function=lambda x: len(tokenizer(x.encode("utf-8"))),
             separators=["\n\n", "\n", ". ", "? ", "! ", " "],
         )
 
@@ -34,39 +30,6 @@ class TextsSplitter:
             f"Текст успешно разбит на {len(chunks)} фрагментов по {chunk_size} токенов каждый."
         )
         return chunks
-
-
-class TqdmTokenStreamer(BaseStreamer):
-    def __init__(self, pbar: tqdm) -> None:
-        self.pbar = pbar
-        self.is_first = True
-
-    @staticmethod
-    def _count_tokens(value: object) -> int:
-        if hasattr(value, "numel"):
-            return int(value.numel())
-
-        if isinstance(value, (list, tuple)):
-            count = 0
-            for item in value:
-                if isinstance(item, (list, tuple)):
-                    count += len(item)
-                else:
-                    count += 1
-            return count or 1
-
-        return 1
-
-    def put(self, value: object) -> None:
-        if self.is_first:
-            self.is_first = False
-            return
-
-        self.pbar.update(self._count_tokens(value))
-
-    def end(self) -> None:
-        if self.pbar:
-            self.pbar.close()
 
 
 def log_retry_attempt(retry_state):

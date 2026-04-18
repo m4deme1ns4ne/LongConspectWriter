@@ -1,9 +1,4 @@
 from src.core.transcribing import FasterWhisper
-from src.agents.agent_drafter import AgentDrafter
-from src.agents.agent_synthesizer import (
-    AgentSynthesizerTransformers,
-    AgentSynthesizerLlama,
-)
 from src.agents.agent_planner import AgentLocalPlanner, AgentGlobalPlanner
 from src.core.clustering import SemanticLocalClusterizer, SemanticGlobalClusterizer
 from os import PathLike
@@ -111,14 +106,32 @@ class LongConspectPipeline(Trackable):
         Выход: Путь к файлу с мини-конспектами и плейсхолдерами {{formula}}, {{figure}}.
                 None если Drafter не нашёл академического контента.
         """
-        with AgentDrafter(
-            init_config=self.drafter_init_config,
-            gen_config=self.drafter_gen_config,
-            app_config=self.drafter_app_config,
-        ) as drafter:
-            new_path = drafter.run(path)
-        if not new_path:
-            return None
+        backend = getattr(self.drafter_init_config, "backend", "llamacpp")
+
+        if backend == "llamacpp":
+            logger.info("Запуск Драфтера через Llama.cpp (Оптимальный режим)")
+            from src.agents.agent_drafter import AgentDrafterLlama
+
+            with AgentDrafterLlama(
+                init_config=self.drafter_init_config,
+                gen_config=self.drafter_gen_config,
+                app_config=self.drafter_app_config,
+            ) as drafter:
+                new_path = drafter.run(path)
+
+        elif backend == "transformers":
+            logger.info("Запуск Драфтера через Transformers (Режим совместимости)")
+            from src.agents.agent_drafter import AgentDrafterTransformers
+
+            with AgentDrafterTransformers(
+                init_config=self.drafter_init_config,
+                gen_config=self.drafter_gen_config,
+                app_config=self.drafter_app_config,
+            ) as drafter:
+                new_path = drafter.run(path)
+        else:
+            raise ValueError(f"Неизвестный бэкенд для Синтезатора: {backend}")
+
         return new_path
 
     @check_path_is
@@ -268,7 +281,7 @@ class LongConspectPipeline(Trackable):
         from loguru import logger
 
         logger.success(
-            f"Финальный конспект успешно сохранен по пути: {final_conspect_path}"
+            f"Итоговый отформатированный конспект успешно сохранен по пути: {final_conspect_path}"
         )
 
         return final_conspect_path

@@ -4,16 +4,12 @@ from src.core.vram_manager import VRamCleaner
 from src.core.utils import log_execution_time, LoadPrompts, log_retry_attempt
 from src.configs.ai_configs import (
     AppLLMConfig,
-    TransformersLLMGenConfig,
-    TransformersLLMInitConfig,
     LlamaCppInitConfig,
     LlamaCppGenConfig,
 )
 from dataclasses import asdict
 from tenacity import retry, stop_after_attempt, wait_fixed
 from typing import Any
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.generation.streamers import BaseStreamer
 from llama_cpp import Llama
 
 
@@ -69,122 +65,6 @@ class BaseLLMAgent(BaseAgent):
     @abstractmethod
     def _build_prompt(self) -> Any:
         pass
-
-
-class BaseTransformersAgent(BaseLLMAgent):
-    def __init__(
-        self,
-        init_config: TransformersLLMInitConfig,
-        gen_config: TransformersLLMGenConfig,
-        app_config: AppLLMConfig,
-    ) -> None:
-
-        self._init_config = init_config
-        self._gen_config = gen_config
-        self._app_config = app_config
-        logger.info(
-            f"Инициализация {self.__class__.__name__} (Модель: {self._init_config.pretrained_model_name_or_path}, Устройство: {self._init_config.device_map})"
-        )
-
-        logger.info(
-            f"Загрузка {self._init_config.pretrained_model_name_or_path} в память..."
-        )
-        self.model = AutoModelForCausalLM.from_pretrained(**asdict(self._init_config))
-        logger.info(
-            f"Модель {self._init_config.pretrained_model_name_or_path} загружена."
-        )
-
-        logger.info(
-            f"Загрузка токенайзера для {self._init_config.pretrained_model_name_or_path} в память..."
-        )
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self._init_config.pretrained_model_name_or_path
-        )
-        logger.info(
-            f"Токенайзер для {self._init_config.pretrained_model_name_or_path} загружен."
-        )
-
-        self.prompts = LoadPrompts.load_prompts(self._app_config.prompt_path)
-        self.system_prompt = self.prompts[self._app_config.agent_name]["system_prompt"]
-        self.user_template = self.prompts[self._app_config.agent_name]["user_template"]
-        self.negative_prompt = self.prompts[self._app_config.agent_name][
-            "negative_prompt"
-        ]
-        if self.negative_prompt and self._gen_config.guidance_scale > 1.0:
-            logger.info(
-                f"Негативный промпт загружен успешно для агента {self.__class__.__name__}"
-            )
-        elif self.negative_prompt and self._gen_config.guidance_scale <= 1.0:
-            logger.warning(
-                f"Негативный промпт обнаружен но не загружен для агента: {self.__class__.__name__}, так как guidance_scale: {self._gen_config.guidance_scale}"
-            )
-        else:
-            logger.warning(
-                f"Негативный промпт не обнаружен для агента: {self.__class__.__name__}"
-            )
-
-        logger.debug(
-            f"Параметры запуска агента {self.__class__.__name__}: {self._init_config}"
-        )
-        logger.debug(
-            f"Параметры генерации агента {self.__class__.__name__}: {self._gen_config}"
-        )
-        logger.debug(
-            f"Параметры использования агента {self.__class__.__name__}: {self._app_config}"
-        )
-
-    def _build_prompt(self, **kwargs) -> str:
-        user_prompt = self.user_template.format(**kwargs)
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": user_prompt},
-        ]
-        prompt = self.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
-        )
-        return prompt
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_fixed(5),
-        before_sleep=log_retry_attempt,
-        reraise=True,
-    )
-    def _generate(
-        self,
-        prompt: str,
-        streamer: BaseStreamer | None = None,  # type: ignore
-        bad_words_ids: list[list[int]] | None = None,
-    ) -> str:
-        import torch
-
-        model_inputs = self.tokenizer([prompt], return_tensors="pt").to(
-            self.model.device
-        )
-        if self.negative_prompt:
-            negative_prompt_ids = (
-                self.tokenizer([self.negative_prompt], return_tensors="pt")
-                .to(self.model.device)
-                .input_ids
-            )
-        else:
-            negative_prompt_ids = None
-        with torch.no_grad():  # type: ignore
-            output = self.model.generate(
-                **model_inputs,
-                **asdict(self._gen_config),
-                streamer=streamer,
-                bad_words_ids=bad_words_ids,
-                negative_prompt_ids=negative_prompt_ids,
-            )
-        output = [
-            output_ids[len(input_ids) :]
-            for input_ids, output_ids in zip(model_inputs.input_ids, output)
-        ]
-
-        response = self.tokenizer.batch_decode(output, skip_special_tokens=True)[0]
-
-        return response
 
 
 class BaseLlamaCppAgent(BaseLLMAgent):

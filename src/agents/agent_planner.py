@@ -3,13 +3,12 @@ import time
 from tqdm import tqdm
 import os
 import sys
-from src.core.utils import TqdmTokenStreamer
-from src.core.base import BaseTransformersAgent
+from src.core.base import BaseLlamaCppAgent
 from pathlib import Path
 from src.core.utils import SEPARATOR
 
 
-class AgentLocalPlanner(BaseTransformersAgent):
+class AgentLocalPlanner(BaseLlamaCppAgent):
     def __init__(self, init_config, gen_config, app_config):
         super().__init__(init_config, gen_config, app_config)
 
@@ -21,10 +20,8 @@ class AgentLocalPlanner(BaseTransformersAgent):
         current_tokens = 0
 
         for chunk in local_clusters:
-            tokenized_chunk = self.tokenizer(chunk, add_special_tokens=False)[
-                "input_ids"
-            ]
-            len_chunk_tokens = len(tokenized_chunk)
+            tokenized_chunk = len(self.model.tokenize(chunk.encode("utf-8")))
+            len_chunk_tokens = tokenized_chunk
 
             if len_chunk_tokens + current_tokens > max_tokens:
                 current_batch = "\n\n------------------------\n\n".join(current_batch)
@@ -47,7 +44,7 @@ class AgentLocalPlanner(BaseTransformersAgent):
         with open(path, "r", encoding="utf-8") as file:
             local_clusters = file.read()
 
-        max_tokens = int(self._gen_config.max_new_tokens * 2)
+        max_tokens = int(self._gen_config.max_tokens * 2)
         chunking_local_clusters = self._chunking(local_clusters, max_tokens)
         logger.info(
             f"Локальных кластеров разбитых на {max_tokens} токенов получилось: {len(chunking_local_clusters)}"
@@ -67,7 +64,7 @@ class AgentLocalPlanner(BaseTransformersAgent):
         ) as pbar:
             for chunk in chunking_local_clusters:
                 with tqdm(
-                    total=self._gen_config.max_new_tokens,
+                    total=self._gen_config.max_tokens,
                     desc="Генерация токенов",
                     unit="токен",
                     colour="blue",
@@ -76,10 +73,10 @@ class AgentLocalPlanner(BaseTransformersAgent):
                     file=sys.stdout,
                     dynamic_ncols=True,
                 ) as token_pbar:
-                    streamer = TqdmTokenStreamer(token_pbar)
                     response = self._generate(
                         prompt=self._build_prompt(text=chunk),
-                        streamer=streamer,
+                        stream=True,
+                        token_pbar=token_pbar,
                     )
                 pbar.update(1)
                 if "[NO_TOPICS]" in response:
@@ -93,9 +90,7 @@ class AgentLocalPlanner(BaseTransformersAgent):
         final_drafts = f"\n\n{SEPARATOR}\n\n".join(final_drafts)
 
         timestamp = int(time.time())
-        safe_model_name = self._init_config.pretrained_model_name_or_path.replace(
-            "/", "_"
-        )
+        safe_model_name = self._init_config.model_path.replace("/", "_")
         pure_draft_name = os.path.basename(path)
         out_path = os.path.join(
             self._app_config.output_dir,
@@ -109,7 +104,7 @@ class AgentLocalPlanner(BaseTransformersAgent):
         return out_path
 
 
-class AgentGlobalPlanner(BaseTransformersAgent):
+class AgentGlobalPlanner(BaseLlamaCppAgent):
     def __init__(self, init_config, gen_config, app_config):
         super().__init__(init_config, gen_config, app_config)
 
@@ -120,7 +115,7 @@ class AgentGlobalPlanner(BaseTransformersAgent):
         local_plan = local_plan.replace(f"\n\n{SEPARATOR}\n\n", "\n")
 
         with tqdm(
-            total=self._gen_config.max_new_tokens,
+            total=self._gen_config.max_tokens,
             desc="Генерация токенов",
             unit="токен",
             colour="blue",
@@ -129,17 +124,15 @@ class AgentGlobalPlanner(BaseTransformersAgent):
             file=sys.stdout,
             dynamic_ncols=True,
         ) as token_pbar:
-            streamer = TqdmTokenStreamer(token_pbar)
             response = self._generate(
                 prompt=self._build_prompt(text=local_plan),
-                streamer=streamer,
+                stream=True,
+                token_pbar=token_pbar,
             )
         logger.info("Генерация глобальных заголовков завершена.")
 
         timestamp = int(time.time())
-        safe_model_name = self._init_config.pretrained_model_name_or_path.replace(
-            "/", "_"
-        )
+        safe_model_name = self._init_config.model_path.replace("/", "_")
         pure_draft_name = os.path.basename(path)
         out_path = os.path.join(
             self._app_config.output_dir,

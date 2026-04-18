@@ -1,26 +1,19 @@
 # Drafter-Agent
 
 init_config:
-  pretrained_model_name_or_path: "Qwen/Qwen3.5-4B"
-  torch_dtype: null
-  device_map: null
-  trust_remote_code: false
-  attn_implementation: "sdpa"
-  quantization_config:
-    load_in_4bit: true
-    bnb_4bit_quant_type: "nf4"
-    bnb_4bit_use_double_quant: true
-    bnb_4bit_compute_dtype: null
-
+  model_path: ".models/T-lite-it-2.1-Q6_K.gguf"
+  n_gpu_layers: -1
+  n_ctx: 8192
+  verbose: false
 
 gen_config:
-  max_new_tokens: 512
-  repetition_penalty: 1.2
+  max_tokens: 512
+  repeat_penalty: 1.0
   temperature: 0.1
-  do_sample: false
-  guidance_scale: 1.0
+  top_p: 0.8
+  top_k: 20
 
 app_config:
   agent_name: "drafter"
   prompt_path: "src/configs/config-agents/drafter/prompt_drafter.yaml"
-  output_dir: "data/example-mini-conspect"
+  output_dir: "data/example-conspect"

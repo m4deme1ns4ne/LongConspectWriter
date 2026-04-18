@@ -7,7 +7,7 @@ def convert_json_to_md(path, output_path="data/example-final-conspect"):
     with open(path, "r", encoding="utf-8") as file:
         conspect = json.load(file)
 
-        final_conspect = ""
+        final_conspect = """**Этот конспект сгенерирован мультиагентной системой на базе AI.**\n**Система может допускать ошибки в формулах, вычислениях и специфической терминологии.**\n**Пожалуйста, относитесь с понимаем и проверяйте конспект!**\n\n"""
 
         for topik, body in conspect.items():
             final_conspect += f"# {topik}\n\n"
@@ -20,7 +20,7 @@ def convert_json_to_md(path, output_path="data/example-final-conspect"):
         timestamp = int(time.time())
         out_filepath = os.path.join(
             output_path,
-            f"finileconspect-{timestamp}.md",
+            f"finalconspect-{timestamp}.md",
         )
 
         os.makedirs(os.path.dirname(out_filepath), exist_ok=True)
@@ -28,3 +28,6 @@ def convert_json_to_md(path, output_path="data/example-final-conspect"):
             f.write(final_conspect)
 
         return out_filepath
+
+
+# convert_json_to_md("data/example-conspect/T-lite-it-2_1-Q4_K_M_gguf-intfloat_multilingual-e5-small-1776515042.json-1776515434.json")
