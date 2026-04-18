@@ -1,53 +1,51 @@
 # LongConspectWriter
 
-[Русская версия](README.ru.md)
+[Russian version](README.ru.md)
 
-Research MVP for generating structured academic notes from long lecture audio.
+LongConspectWriter is a research prototype for turning long lecture audio into structured academic notes. The repository implements a local, multi-stage pipeline that separates transcription, transcript cleaning, semantic clustering, hierarchical planning, topic-aware synthesis, and Markdown export.
 
-The project uses a local multi-stage pipeline. Long, noisy lecture transcripts are processed step by step: transcription, transcript cleaning, semantic grouping, structure planning, topic matching, final long-form synthesis, and Markdown export of the last JSON result. The stack is hybrid: `faster-whisper` is used for STT, Transformers are used for Drafter and the planners, while Synthesizer can run either through `llama_cpp` on a local GGUF model or through a Transformers compatibility backend.
+The default stack is local-first:
 
-## What Works Now
+- STT: `faster-whisper`
+- LLM stages: `llama_cpp` with GGUF weights
+- semantic grouping: sentence embeddings plus clustering
+- export: JSON-to-Markdown conversion for the final conspect
 
-- `STT` with `faster-whisper`
-- transcript cleaning with `Drafter`
-- local semantic clustering
-- local and global planning
-- global topic assignment
-- final JSON conspect generation with `Synthesizer` on a local GGUF model or in Transformers compatibility mode
-- Markdown export of the final JSON draft
+## What It Does
 
-This is a working research MVP, not a finished product.
+- transcribes long-form audio with VAD-aware STT
+- removes transcript noise and keeps domain-relevant content
+- groups sentences into local semantic clusters
+- builds a two-level outline with local and global planning
+- aligns clusters to chapter-level topics
+- synthesizes a final structured JSON conspect
+- exports the final result as Markdown for review and sharing
 
-## Current Pipeline
-
-Main `all` flow:
+## System Overview
 
 `audio -> STT -> Drafter -> Local Clustering -> Local Planner -> Global Planner -> Global Clustering -> Synthesizer -> Markdown export`
 
-In the current version:
+The pipeline is intentionally staged. Each intermediate artifact is written to disk, which makes the system suitable for inspection, ablation studies, and later evaluation in a paper setting.
 
-- `Drafter` cleans raw transcript noise before downstream processing and keeps only fragments with academic content
-- `Synthesizer` works topic by topic, can split large topic clusters into smaller chunks, and produces the final structured JSON draft through the selected backend
-- the final JSON draft is converted into a Markdown conspect at the end of the pipeline
-- intermediate artifacts are saved to disk for inspection and debugging
+## Default Configuration
 
-## Scope
+The bundled configs currently use:
 
-The project is currently aimed at:
+- STT model: `large-v3-turbo`
+- default GGUF model: `.models/T-lite-it-2.1-Q6_K.gguf`
+- local clustering embedding model: `cointegrated/rubert-tiny2`
+- global clustering embedding model: `intfloat/multilingual-e5-small`
 
-- Russian-language lecture audio
-- STEM / technical subjects
-- local inference with limited VRAM
-- long-form academic note generation instead of short summarization
-- a mixed backend setup with Transformers and a local GGUF-based synthesizer
+By default, the LLM stages run locally through `llama_cpp`. The CLI currently reads the bundled YAML configs under `src/configs/config-agents/`.
 
 ## Quick Start
 
 ### Requirements
 
 - Python `3.12+`
-- CUDA GPU recommended
-- `uv` recommended
+- `uv`
+- a CUDA GPU is recommended for practical inference speed
+- local access to the model files referenced in the configs
 
 ### Install
 
@@ -66,30 +64,47 @@ uv run python __main__.py --action all --path_to_file "data/example-audio/your_l
 ```bash
 uv run python __main__.py --action stt --path_to_file "data/example-audio/your_lecture.mp3"
 uv run python __main__.py --action drafter --path_to_file "data/example-transcrib/your_transcript.txt"
-uv run python __main__.py --action local_clustering --path_to_file "data/example-mini-conspect/your_cleaned_transcript.txt"
+uv run python __main__.py --action local_clustering --path_to_file "data/example-transcrib/your_transcript.txt"
+uv run python __main__.py --action local_planner --path_to_file "data/example-clusters/example-local-clusters/your_clusters.txt"
+uv run python __main__.py --action global_planner --path_to_file "data/example-plan/example-local-plan/your_local_plan.txt"
 uv run python __main__.py --action planner --path_to_file "data/example-clusters/example-local-clusters/your_clusters.txt"
-uv run python __main__.py --action global_clustering --global_plan_path "data/example-plan/example-global-plan/plan.json" --local_clusters_path "data/example-clusters/example-local-clusters/your_clusters.txt"
-uv run python __main__.py --action synthesizer --path_to_file "data/example-clusters/example-global-clusters/global_clusters.json"
+uv run python __main__.py --action clustering --path_to_file "data/example-transcrib/your_transcript.txt"
+uv run python __main__.py --action global_clustering --global_plan_path "data/example-plan/example-global-plan/your_global_plan.json" --local_clusters_path "data/example-clusters/example-local-clusters/your_clusters.txt"
+uv run python __main__.py --action synthesizer --path_to_file "data/example-clusters/example-global-clusters/your_global_clusters.json"
 ```
 
-`all` now runs the complete chain and then exports the final JSON into a Markdown file.
+`all` runs the complete chain and then exports the final JSON conspect into Markdown.
 
-### Available CLI actions
+## CLI Actions
 
-- `all`
-- `stt`
-- `drafter`
-- `synthesizer`
-- `planner`
-- `local_planner`
-- `global_planner`
-- `clustering`
-- `local_clustering`
-- `global_clustering`
+| Action | Expected input | Result |
+| --- | --- | --- |
+| `all` | Audio file | Full pipeline with Markdown export |
+| `stt` | Audio or video file | Raw transcript |
+| `drafter` | Raw transcript text | Cleaned transcript |
+| `local_clustering` | Transcript text | Sentence-level local clusters |
+| `local_planner` | Local clusters text | Micro-topics |
+| `global_planner` | Local plan text | JSON chapter outline |
+| `planner` | Local clusters text | Local planning + global planning |
+| `clustering` | Transcript text | Local clustering + planning + global clustering |
+| `global_clustering` | Global plan JSON + local clusters text | Chapter-aligned clusters |
+| `synthesizer` | Global clusters JSON | Final conspect JSON |
+
+## Output Layout
+
+The default configs write timestamped artifacts to `data/`:
+
+- raw transcripts: `data/example-transcrib/`
+- cleaned transcripts and synthesis JSON drafts: `data/example-conspect/`
+- local clusters: `data/example-clusters/example-local-clusters/`
+- local plans: `data/example-plan/example-local-plan/`
+- global plans: `data/example-plan/example-global-plan/`
+- global clusters: `data/example-clusters/example-global-clusters/`
+- Markdown exports: `data/example-final-conspect/`
 
 ## Configuration
 
-Main config files:
+The main configuration files are:
 
 - `src/configs/config-agents/stt/config_stt.yaml`
 - `src/configs/config-agents/drafter/config_drafter.yaml`
@@ -100,93 +115,65 @@ Main config files:
 - `src/configs/bad_words.py`
 - `src/configs/ai_configs.py`
 
-You can change:
+These files control:
 
-- model choices
+- model selection
 - generation parameters
 - prompt templates
 - output directories
-- STT options
-- blocked phrases for generation cleanup
-- `Synthesizer` backend selection and model path in `src/configs/config-agents/synthesizer/config_synthesizer.yaml`
+- STT behavior
+- generation cleanup rules
 
-## Project Structure
+The current CLI path uses the bundled YAML files. A custom `--config_path` flow is reserved for future work.
+
+## Repository Structure
 
 ```text
 src/
-  agents/      # Drafter, Planner, Synthesizer
-  core/        # base abstractions, pipeline, STT, clustering, utils
-  configs/     # ai_configs, bad_words, config-agents
-  tests/       # test placeholders and test configs
+  agents/      # drafter, planners, synthesizer
+  core/        # STT, clustering, pipeline, utilities
+  configs/     # dataclasses, prompts, bad words, YAML configs
+  tests/       # test-oriented config fixtures
 
 data/
   example-audio/
   example-transcrib/
-  example-mini-conspect/
-  example-clusters/
-  example-plan/
   example-conspect/
+  example-plan/
+  example-clusters/
+  example-final-conspect/
 
 .models/
-  # local GGUF models for llama_cpp
+  # local GGUF weights for llama_cpp
 ```
 
-## Saved Artifacts
+## Research Notes
 
-The pipeline writes intermediate results to disk so each stage can be inspected separately:
+This repository is intentionally a research baseline rather than a polished end-user product. The staged design is useful for:
 
-- raw transcripts
-- cleaned transcripts
-- local clusters
-- local plans
-- global plans
-- global clusters
-- final generated JSON drafts
-- exported Markdown conspects
+- qualitative inspection of intermediate outputs
+- stage-wise ablations
+- future benchmark creation
+- paper writing and reproducibility
 
-This is intentional and useful for debugging, research iteration, and future evaluation.
+Current limitations:
 
-## Tests
-
-There is no full automated test suite yet, but the repository already contains test-oriented config files:
-
-- `src/tests/test_config.yaml`
-- `src/tests/test_prompts.yaml`
-
-They can be used as lightweight fixtures for short local runs.
-
-## Demo / Results
-
-Placeholder for:
-
-- pipeline diagram
-- sample output screenshots
-- before / after cleaning examples
-- small end-to-end examples
-
-## Limitations
-
-- focused mainly on Russian lecture audio
-- best suited for technical / scientific content
-- still sensitive to transcript quality
-- not packaged as a user-facing application yet
-- evaluation is still manual / research-oriented
-- the Synthesizer defaults to a local GGUF backend, with a Transformers fallback for compatibility
-- final Markdown export is a simple formatter over the generated JSON, so malformed upstream output can still affect the result
+- tuned primarily for Russian STEM lectures
+- quality remains sensitive to transcript accuracy
+- automatic evaluation is still limited
+- the Markdown export is a lightweight formatter over the final JSON conspect
 
 ## Citation
 
-Placeholder for future paper / preprint.
-
 ```bibtex
-@misc{long_conspect_writer,
+@misc{longconspectwriter,
   title  = {LongConspectWriter},
   author = {TODO},
   year   = {2026},
-  note   = {Work in progress}
+  note   = {Research prototype; replace with final arXiv metadata}
 }
 ```
 
 ## License
 
-This repository is currently licensed under the [MIT License](LICENSE).
+This repository is released under the [MIT License](LICENSE).
