@@ -1,0 +1,237 @@
+@startuml
+title LongConspectWriter - class diagram
+
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam class {
+  BackgroundColor #F8F8F4
+  BorderColor #4E5967
+}
+
+package "CLI" {
+  class "__main__.main" as CliMain {
+    +main(): None
+    +load_configs(yaml_path, init_cls, gen_cls, app_cls): tuple
+  }
+}
+
+package "Core abstractions" {
+  class Trackable {
+    +__init_subclass__(): None
+  }
+
+  abstract class Base {
+    {abstract} +run(): str
+  }
+
+  abstract class BaseAgent {
+    +__enter__(): BaseAgent
+    +__exit__(exc_type, exc_val, exc_tb): None
+  }
+
+  abstract class BaseLLMAgent {
+    {abstract} +_generate(prompt, **kwargs): str
+    {abstract} +_build_prompt(): Any
+  }
+
+  class BaseLlamaCppAgent {
+    -_init_config: LlamaCppInitConfig
+    -_gen_config: LlamaCppGenConfig
+    -_app_config: AppLLMConfig
+    +_build_prompt(**kwargs): list
+    +_generate(prompt, stream, token_pbar): str
+  }
+
+  class BaseSTTAgent
+  class BaseClusterizer
+}
+
+package "Configuration" {
+  class STTInitConfig <<dataclass>> {
+    +model_size_or_path: str
+    +device: str
+    +compute_type: str
+  }
+
+  class STTGenConfig <<dataclass>> {
+    +beam_size: int
+    +vad_filter: bool
+    +language: str
+  }
+
+  class AppSTTConfig <<dataclass>> {
+    +output_dir: PathLike
+  }
+
+  class LlamaCppInitConfig <<dataclass>> {
+    +model_path: str
+    +n_gpu_layers: int
+    +n_ctx: int
+  }
+
+  class LlamaCppGenConfig <<dataclass>> {
+    +max_tokens: int
+    +temperature: float
+    +top_p: float
+  }
+
+  class AppLLMConfig <<dataclass>> {
+    +agent_name: str
+    +prompt_path: PathLike
+    +output_dir: PathLike
+  }
+}
+
+package "Pipeline" {
+  class LongConspectPipeline {
+    +run(audio_file_path): str
+    +_call_stt(path): str
+    +_call_drafter(path): str
+    +_call_local_clustering(path): str
+    +_call_local_planner(path): str
+    +_call_global_planner(path): str
+    +_call_global_clustering(global_plan, local_clusters): str
+    +_call_synthesizer(path): str
+  }
+
+  enum PipelineAction <<generated>> {
+    all
+    stt
+    drafter
+    planner
+    clustering
+    local_clustering
+    local_planner
+    global_planner
+    global_clustering
+    synthesizer
+  }
+
+  enum ArtifactType <<generated>> {
+    audio
+    raw_transcript
+    clean_draft
+    local_clusters
+    local_plan
+    global_plan
+    global_clusters
+    json_conspect
+    markdown_conspect
+  }
+
+  enum PipelineStatus <<generated>> {
+    created
+    running
+    completed
+    failed
+  }
+
+  class StageArtifact <<generated dataclass>> {
+    +type: ArtifactType
+    +path: Path
+    +description: str
+    +as_record(): dict
+  }
+
+  class PipelineStage <<generated dataclass>> {
+    +action: PipelineAction
+    +name: str
+    +input_types: tuple
+    +output_type: ArtifactType
+    +description: str
+  }
+
+  class PipelineRun <<generated dataclass>> {
+    +action: PipelineAction
+    +input_path: Path
+    +status: PipelineStatus
+    +stages: list
+    +artifacts: list
+    +mark_running(): None
+    +add_artifact(type, path, description): StageArtifact
+    +latest_artifact(type): StageArtifact
+    +mark_completed(): None
+    +mark_failed(message): None
+    +as_record(): dict
+  }
+}
+
+package "Agents and processors" {
+  class FasterWhisper {
+    +run(audio_file_path): str
+  }
+
+  class AgentDrafterLlama {
+    +run(path_transcrib): str
+  }
+
+  class AgentLocalPlanner {
+    +run(path): str
+    -_chunking(text, max_tokens): list
+  }
+
+  class AgentGlobalPlanner {
+    +run(path): str
+  }
+
+  class AgentSynthesizerLlama {
+    +run(path): str
+  }
+
+  class SemanticLocalClusterizer {
+    +run(path): str
+    -_format_cluster_output(sentences, labels): list
+  }
+
+  class SemanticGlobalClusterizer {
+    +run(plan_path, local_clusters_path): str
+  }
+
+  class "convert_json_to_md" as JsonMarkdownExporter {
+    +convert_json_to_md(path, output_path): str
+  }
+}
+
+Trackable <|-- BaseAgent
+Base <|-- BaseAgent
+BaseAgent <|-- BaseLLMAgent
+BaseLLMAgent <|-- BaseLlamaCppAgent
+BaseAgent <|-- BaseSTTAgent
+Trackable <|-- BaseClusterizer
+
+BaseSTTAgent <|-- FasterWhisper
+BaseLlamaCppAgent <|-- AgentDrafterLlama
+BaseLlamaCppAgent <|-- AgentLocalPlanner
+BaseLlamaCppAgent <|-- AgentGlobalPlanner
+BaseLlamaCppAgent <|-- AgentSynthesizerLlama
+BaseClusterizer <|-- SemanticLocalClusterizer
+BaseClusterizer <|-- SemanticGlobalClusterizer
+Trackable <|-- LongConspectPipeline
+
+CliMain ..> LongConspectPipeline : creates
+LongConspectPipeline ..> FasterWhisper : creates
+LongConspectPipeline ..> AgentDrafterLlama : creates
+LongConspectPipeline ..> SemanticLocalClusterizer : creates
+LongConspectPipeline ..> AgentLocalPlanner : creates
+LongConspectPipeline ..> AgentGlobalPlanner : creates
+LongConspectPipeline ..> SemanticGlobalClusterizer : creates
+LongConspectPipeline ..> AgentSynthesizerLlama : creates
+LongConspectPipeline ..> JsonMarkdownExporter : exports
+LongConspectPipeline ..> PipelineRun : can track
+
+BaseLlamaCppAgent o-- LlamaCppInitConfig
+BaseLlamaCppAgent o-- LlamaCppGenConfig
+BaseLlamaCppAgent o-- AppLLMConfig
+FasterWhisper o-- STTInitConfig
+FasterWhisper o-- STTGenConfig
+FasterWhisper o-- AppSTTConfig
+
+PipelineRun "1" o-- "*" PipelineStage
+PipelineRun "1" o-- "*" StageArtifact
+PipelineStage --> PipelineAction
+PipelineStage --> ArtifactType
+StageArtifact --> ArtifactType
+PipelineRun --> PipelineStatus
+
+@enduml

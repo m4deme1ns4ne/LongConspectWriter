@@ -1,0 +1,79 @@
+@startuml
+title LongConspectWriter - full pipeline sequence
+
+skinparam shadowing false
+autonumber
+
+actor User
+participant "__main__.main()" as CLI
+participant "LongConspectPipeline" as Pipeline
+participant "FasterWhisper\n(STT process)" as STT
+participant "AgentDrafterLlama" as Drafter
+participant "SemanticLocalClusterizer" as LocalCluster
+participant "AgentLocalPlanner" as LocalPlanner
+participant "AgentGlobalPlanner" as GlobalPlanner
+participant "SemanticGlobalClusterizer" as GlobalCluster
+participant "AgentSynthesizerLlama" as Synthesizer
+participant "convert_json_to_md()" as Exporter
+database "data/* artifacts" as FS
+
+User -> CLI: run --action all --path_to_file audio
+activate CLI
+CLI -> CLI: parse args and load YAML configs
+CLI -> Pipeline: run(audio_path)
+activate Pipeline
+
+Pipeline -> STT: _call_stt(audio_path)
+activate STT
+STT -> FS: save raw transcript (.txt)
+STT --> Pipeline: transcript_path
+deactivate STT
+
+Pipeline -> Drafter: _call_drafter(transcript_path)
+activate Drafter
+Drafter -> FS: save cleaned academic draft (.txt)
+Drafter --> Pipeline: draft_path
+deactivate Drafter
+
+Pipeline -> LocalCluster: _call_local_clustering(draft_path)
+activate LocalCluster
+LocalCluster -> FS: save local clusters (.txt)
+LocalCluster --> Pipeline: local_clusters_path
+deactivate LocalCluster
+
+Pipeline -> LocalPlanner: _call_local_planner(local_clusters_path)
+activate LocalPlanner
+LocalPlanner -> FS: save local topic plan (.md)
+LocalPlanner --> Pipeline: local_plan_path
+deactivate LocalPlanner
+
+Pipeline -> GlobalPlanner: _call_global_planner(local_plan_path)
+activate GlobalPlanner
+GlobalPlanner -> FS: save global chapter plan (.json)
+GlobalPlanner --> Pipeline: global_plan_path
+deactivate GlobalPlanner
+
+Pipeline -> GlobalCluster: _call_global_clustering(global_plan_path, local_clusters_path)
+activate GlobalCluster
+GlobalCluster -> FS: save chapter-bound clusters (.json)
+GlobalCluster --> Pipeline: global_clusters_path
+deactivate GlobalCluster
+
+Pipeline -> Synthesizer: _call_synthesizer(global_clusters_path)
+activate Synthesizer
+Synthesizer -> FS: save JSON conspect (.json)
+Synthesizer --> Pipeline: json_conspect_path
+deactivate Synthesizer
+
+Pipeline -> Exporter: convert_json_to_md(json_conspect_path)
+activate Exporter
+Exporter -> FS: save final Markdown conspect (.md)
+Exporter --> Pipeline: final_conspect_path
+deactivate Exporter
+
+Pipeline --> CLI: final_conspect_path
+deactivate Pipeline
+CLI --> User: log "work completed"
+deactivate CLI
+
+@enduml

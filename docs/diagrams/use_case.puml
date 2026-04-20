@@ -1,0 +1,61 @@
+@startuml
+title LongConspectWriter - use case diagram
+
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam usecase {
+  BackgroundColor #F8F8F4
+  BorderColor #4E5967
+}
+skinparam actor {
+  BackgroundColor #FFFFFF
+  BorderColor #4E5967
+}
+
+actor "Пользователь" as User
+actor "Разработчик" as Dev
+actor "Локальные\nAI-модели" as Models
+
+rectangle "LongConspectWriter" {
+  usecase "Получить Markdown-\nконспект из аудио" as UCAll
+  usecase "Запустить отдельный\nэтап пайплайна" as UCStage
+  usecase "Посмотреть\nпромежуточные артефакты" as UCArtifacts
+  usecase "Настроить модели,\nпромпты и директории" as UCConfig
+  usecase "Выполнить AI-\nобработку" as UCAI
+}
+
+User --> UCAll
+User --> UCStage
+User --> UCArtifacts
+
+Dev --> UCConfig
+Dev --> UCStage
+Dev --> UCArtifacts
+
+Models --> UCAI
+
+note right of UCAll
+  Полный сценарий:
+  1. STT
+  2. очистка транскрипта
+  3. кластеризация
+  4. план лекции
+  5. JSON-конспект
+  6. Markdown export
+end note
+
+note right of UCStage
+  Доступные CLI actions:
+  stt, drafter, local_clustering,
+  planner, global_clustering,
+  synthesizer.
+end note
+
+note bottom of UCAI
+  Используются FasterWhisper,
+  Llama.cpp-агенты и embedding-модели.
+end note
+
+@enduml

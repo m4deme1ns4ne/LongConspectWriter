@@ -1,0 +1,47 @@
+@startuml
+title LongConspectWriter - pipeline state diagram
+
+skinparam shadowing false
+
+[*] --> Created
+Created --> ConfigLoaded : load_configs()
+ConfigLoaded --> InputValidated : input file exists
+ConfigLoaded --> Failed : config read error
+InputValidated --> Transcribing : action=all or stt
+InputValidated --> SingleStageRunning : individual action
+InputValidated --> Failed : input path missing
+
+Transcribing --> TranscriptReady : raw transcript saved
+TranscriptReady --> Drafting : _call_drafter()
+Drafting --> DraftReady : cleaned transcript saved
+DraftReady --> LocalClustering : _call_local_clustering()
+LocalClustering --> LocalClustersReady : local clusters saved
+LocalClustersReady --> LocalPlanning : _call_local_planner()
+LocalPlanning --> LocalPlanReady : local topics saved
+LocalPlanReady --> GlobalPlanning : _call_global_planner()
+GlobalPlanning --> GlobalPlanReady : chapter plan saved
+GlobalPlanReady --> GlobalClustering : _call_global_clustering()
+GlobalClustering --> GlobalClustersReady : clusters attached to chapters
+GlobalClustersReady --> Synthesizing : _call_synthesizer()
+Synthesizing --> JsonConspectReady : JSON conspect saved
+JsonConspectReady --> ExportingMarkdown : convert_json_to_md()
+ExportingMarkdown --> MarkdownReady : Markdown saved
+MarkdownReady --> Completed
+
+SingleStageRunning --> SingleArtifactReady : selected stage saved artifact
+SingleArtifactReady --> Completed
+
+Transcribing --> Failed : STT process error
+Drafting --> Failed : LLM generation error
+LocalClustering --> Failed : clustering error
+LocalPlanning --> Failed : LLM generation error
+GlobalPlanning --> Failed : invalid JSON plan
+GlobalClustering --> Failed : matching error
+Synthesizing --> Failed : synthesis error
+ExportingMarkdown --> Failed : export error
+SingleStageRunning --> Failed : stage error
+
+Completed --> [*]
+Failed --> [*]
+
+@enduml
