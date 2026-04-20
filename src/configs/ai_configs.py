@@ -55,10 +55,12 @@ class LlamaCppInitConfig:
 @dataclass
 class LlamaCppGenConfig:
     max_tokens: int
-    repeat_penalty: float | None = None
-    temperature: float | None = None
-    top_p: float | None = None
-    top_k: int | None = None
+    repeat_penalty: float = 1.1
+    temperature: float = 0.5
+    top_p: float = 1.0
+    top_k: int = -1
+    presence_penalty: float = 0.0
+    min_p: float = 0.05
 
 
 @dataclass
