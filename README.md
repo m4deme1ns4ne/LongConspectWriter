@@ -17,22 +17,20 @@
 flowchart TD
     Audio["Audio / Video Stream"] --> STT["FasterWhisper (STT)"]
     
-    STT --> |"Raw Transcript"| Drafter["Agent: Drafter<br/>(Очистка и тегирование)"]
+    STT --> |"Raw Transcript"| Drafter["Agent: Drafter<br/>(Transcription)"]
     
-    Drafter --> |"Cleaned Text"| LCluster["Local Clustering<br/>(Разбивка на блоки)"]
+    Drafter --> |"Cleaned Text"| LCluster["Local Clustering<br/>(Cleaning up transcription)"]
     
-    LCluster --> LPlanner["Agent: Local Planner<br/>(Генерация микротем)"]
+    LCluster --> LPlanner["Agent: Local Planner<br/>(Generating Local clusters)"]
     
-    LPlanner --> GPlanner["Agent: Global Planner<br/>(Сборка оглавления)"]
+    LPlanner --> GPlanner["Agent: Global Planner<br/>(Generating Local topics)"]
     
-    LCluster & GPlanner --> GCluster["Global Clustering<br/>(Привязка текста к главам)"]
+    LCluster & GPlanner --> GCluster["Global Clustering<br/>(Linking text to chapters)"]
     
-    GCluster --> Synthesizer["Agent: Synthesizer<br/>(Рендеринг конспекта)"]
-    
-    %% Состояние контекста сбоку, чтобы не ломать прямую линию
-    State[("State Management<br/>(rolling_summary, mega_compressor)")] <-.-|Context Sync| Synthesizer
+    GCluster --> Synthesizer["Agent: Synthesizer<br/>(Rendering of the academic summary)"]
     
     Synthesizer --> JSON["JSON Conspect"]
+
     JSON --> MD["Markdown Export"]
 ```
 
