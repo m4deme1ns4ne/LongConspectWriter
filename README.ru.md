@@ -1,4 +1,4 @@
-# LongConspectWriter
+# LongConspectWriter: Local Multi-Agent System For Generating Structured Academic Notes
 
 [README.md in english](README.md) | README.md на русском
 
