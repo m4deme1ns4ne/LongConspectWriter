@@ -6,6 +6,7 @@ import functools
 import time
 from razdel import sentenize
 import sys
+from dataclasses import dataclass
 
 
 class TextsSplitter:
@@ -100,3 +101,12 @@ def check_path_is(func):
 
 
 SEPARATOR = "\n\n------------------------\n\n"
+
+
+@dataclass
+class ColoursForTqdm:
+    first_level: str = "#f5eee6"
+    second_level: str = "#f3d7ca"
+    third_level: str = "#e6a4b4"
+    fourth_level: str = "#c86b85"
+    fifth_level: str = "#773245"

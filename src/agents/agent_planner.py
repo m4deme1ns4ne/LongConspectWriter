@@ -5,7 +5,7 @@ import os
 import sys
 from src.core.base import BaseLlamaCppAgent
 from pathlib import Path
-from src.core.utils import SEPARATOR
+from src.core.utils import SEPARATOR, ColoursForTqdm
 
 
 class AgentLocalPlanner(BaseLlamaCppAgent):
@@ -57,7 +57,7 @@ class AgentLocalPlanner(BaseLlamaCppAgent):
             total=len(chunking_local_clusters),
             unit="чанк",
             desc="Локальные кластеры",
-            colour="green",
+            colour=ColoursForTqdm.first_level,
             position=0,
             file=sys.stdout,
             dynamic_ncols=True,
@@ -67,7 +67,7 @@ class AgentLocalPlanner(BaseLlamaCppAgent):
                     total=self._gen_config.max_tokens,
                     desc="Генерация токенов",
                     unit="токен",
-                    colour="blue",
+                    colour=ColoursForTqdm.second_level,
                     leave=False,
                     position=1,
                     file=sys.stdout,
