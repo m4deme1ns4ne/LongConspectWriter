@@ -1,51 +1,81 @@
 # LongConspectWriter
 
-[English version](README.md)
+[README.md on english](README.md) | README.md на русском
 
-LongConspectWriter - исследовательский прототип для преобразования длинных аудиозаписей лекций в структурированные академические конспекты. Репозиторий реализует локальный многоэтапный пайплайн, в котором транскрибация, очистка транскрипта, семантическая кластеризация, иерархическое планирование, тематический синтез и экспорт в Markdown разделены на независимые воспроизводимые стадии.
+LongConspectWriter - исследовательский прототип мультиагентной системы для задачи **Audio-to-LongConspect Generation (A2LCG)**: трансляции неструктурированного аудиопотока лекции в объемный академический конспект в формате Markdown. Проект рассматривает генерацию конспекта не как одиночный вызов языковой модели, а как последовательность наблюдаемых стадий: транскрибация, очистка, семантическая нормализация, иерархическое планирование, тематическая кластеризация, синтез и экспорт.
 
-Стек по умолчанию локальный:
+Центральная гипотеза проекта состоит в том, что длинные STEM-лекции требуют декомпозированной архитектуры с контролем промежуточных состояний. Ошибки распознавания речи, локальные акустические артефакты и шум разговорной речи не должны напрямую попадать в финальный генератор длинного текста: в противном случае они усиливают потерю контекста и приводят к схлопыванию образовательных фактов в краткое резюме.
 
-- STT: `faster-whisper`
-- LLM-стадии: `llama_cpp` с весами GGUF
-- семантическая группировка: эмбеддинги предложений и кластеризация
-- экспорт: преобразование JSON в Markdown для финального конспекта
+Реализация ориентирована на локальный запуск. Агенты работают через `llama.cpp`.
 
-## Что делает проект
+## Архитектура системы (System Architecture)
 
-- транскрибирует длинные лекции с учетом VAD
-- очищает транскрипт от шума и оставляет только предметно значимые фрагменты
-- группирует предложения в локальные семантические кластеры
-- строит двухуровневый план с локальным и глобальным планированием
-- сопоставляет кластеры главам верхнего уровня
-- синтезирует итоговый структурированный JSON-конспект
-- экспортирует результат в Markdown для просмотра и распространения
+```mermaid
+flowchart TD
+    A["Audio Lecture<br/>audio/video stream"] -->|"VAD + transcription"| B["FasterWhisper STT<br/>large-v3-turbo"]
+    A -.->|"Acoustic Artifacts"| P1["Acoustic Artifacts"]
+    B --> C["Raw Transcript"]
+    B -.->|"Transcription Noise"| P2["STT Noise / Transcription Noise"]
 
-## Схема пайплайна
+    subgraph E2E["Naive End-to-End path: error amplification"]
+        N1["Raw transcript as one long prompt"] --> N2["Lost in the Middle"]
+        N2 --> N3["Generation Bias"]
+        N3 --> N4["Semantic Collapse<br/>compressed or incomplete conspect"]
+    end
 
-`audio -> STT -> Drafter -> Local Clustering -> Local Planner -> Global Planner -> Global Clustering -> Synthesizer -> Markdown export`
+    C -.->|"uncontrolled long context"| N1
+    P1 -.->|"propagates"| N1
+    P2 -.->|"propagates"| N1
 
-Пайплайн намеренно разбит на стадии. Каждый промежуточный артефакт сохраняется на диск, поэтому систему удобно использовать для ручной проверки, абляционных экспериментов и последующей оценки в формате статьи.
+    subgraph LCW["LongConspectWriter: decomposed A2LCG pipeline"]
+        C -->|"noise reduction"| D["Drafter<br/>aggressive academic cleaning"]
+        D -->|"E5-compatible formula normalization"| E["Flat Formula Text"]
+        D -->|"semantic tagging"| F["Semantic Tags<br/>[ОПР] / [ТЕО] / [ФОР]"]
+        E --> G["Cleaned Semantic Draft"]
+        F --> G
 
-## Конфигурация по умолчанию
+        G --> H["Local Clustering<br/>sentence-level semantic grouping"]
+        H -->|"micro-topic extraction"| I["Local Planner"]
+        I -->|"chapter plan"| J["Global Planner<br/>JSON outline"]
+        J -->|"chapter-aligned retrieval"| K["Global Clustering"]
+        H --> K
 
-Встроенные конфиги сейчас используют:
+        K --> L["Synthesizer<br/>stateful long-form generation"]
+        L -->|"LaTeX compilation"| M["JSON Conspect"]
+        M --> O["Markdown Export"]
 
-- модель STT: `large-v3-turbo`
-- модель GGUF по умолчанию: `.models/T-lite-it-2.1-Q6_K.gguf`
-- модель эмбеддингов для локальной кластеризации: `cointegrated/rubert-tiny2`
-- модель эмбеддингов для глобальной кластеризации: `intfloat/multilingual-e5-small`
+        L <-->|"context state"| S1["rolling_summary"]
+        L <-->|"safe chunk boundary"| S2["last_tail"]
+        S1 -->|"if > 1024 history tokens"| S3["mega_compressor"]
+        S3 -->|"state compression<br/>math tags and LaTeX are invariant"| S1
+    end
 
-По умолчанию LLM-стадии работают локально через `llama_cpp`. CLI сейчас читает только встроенные YAML-конфиги из `src/configs/config-agents/`.
+    P2 -.->|"localized before synthesis"| D
+    N4 -.->|"avoided by staged control"| D
+```
 
-## Быстрый старт
+## Описание Агентов LLM
 
-### Требования
+#### Drafter
+  -
+
+#### Planners
+  -
+
+#### Synthesizer
+  -
+
+## Описание методов Кластеризации
+  -
+
+## Развертывание
+
+### Зависимости
 
 - Python `3.12+`
 - `uv`
-- желательно наличие CUDA GPU для приемлемой скорости инференса
-- локальный доступ к файлам моделей, указанным в конфигурации
+- CUDA-совместимая среда
+- локальные GGUF-веса
 
 ### Установка
 
@@ -53,11 +83,16 @@ LongConspectWriter - исследовательский прототип для 
 uv sync
 ```
 
-### Запуск полного пайплайна
+**Локальные GGUF-веса нужно скачивать отдельно, и сохранять в папку .models и в конфигах src\configs\config-agents\... указать для какого агента путь до весов.**
+
+
+### Запуск пайплайна
 
 ```bash
 uv run python __main__.py --action all --path_to_file "data/example-audio/your_lecture.mp3"
 ```
+
+`all` запускает полный пайплайн.
 
 ### Запуск отдельных стадий
 
@@ -73,107 +108,60 @@ uv run python __main__.py --action global_clustering --global_plan_path "data/ex
 uv run python __main__.py --action synthesizer --path_to_file "data/example-clusters/example-global-clusters/your_global_clusters.json"
 ```
 
-`all` запускает всю цепочку и затем экспортирует финальный JSON-конспект в Markdown.
+## CLI Actions
 
-## Действия CLI
+Каждый компонент пайплайна можно запускать отдельно для тестирования.
 
-| Действие | Ожидаемый вход | Результат |
+Таблица со всеми доступными командами:
+
+| Action | Input | Output |
 | --- | --- | --- |
-| `all` | Аудиофайл | Полный пайплайн с экспортом в Markdown |
-| `stt` | Аудио- или видеофайл | Сырой транскрипт |
-| `drafter` | Текст сырого транскрипта | Очищенный транскрипт |
-| `local_clustering` | Текст транскрипта | Локальные кластеры на уровне предложений |
-| `local_planner` | Текст локальных кластеров | Микротемы |
-| `global_planner` | Текст локального плана | JSON-оглавление глав |
-| `planner` | Текст локальных кластеров | Локальное и глобальное планирование |
-| `clustering` | Текст транскрипта | Локальная кластеризация, планирование и глобальная кластеризация |
-| `global_clustering` | JSON глобального плана + текст локальных кластеров | Кластеры, привязанные к главам |
-| `synthesizer` | JSON глобальных кластеров | Итоговый JSON-конспект |
+| `all` | Аудио | Конспект в формате .md |
+| `stt` | Аудио | Сырая транскрибация |
+| `drafter` | Сырая транскрибация | Качественная транскрибация |
+| `local_clustering` | Качественная транскрибация | Локальные кластеры |
+| `local_planner` | Локальные кластеры | Локальные темы |
+| `global_planner` | Локальные темы | Глобальные темы |
+| `planner` | Локальные кластеры | Глобальные темы |
+| `global_clustering` | Глобальные темы + локальные кластеры | Кластеры, привязанные к главам |
+| `synthesizer` | Глобальные кластеры |  JSON-конспект |
+| `clustering` | Качественная транскрибация | Глобальные темы |
 
-## Выходные артефакты
+## Output Artifacts
 
-Конфиги по умолчанию сохраняют артефакты с временными метками в `data/`:
+LongConspectWriter сохраняет промежуточные состояния на диск. 
 
-- сырые транскрипты: `data/example-transcrib/`
-- очищенные транскрипты и JSON-черновики синтеза: `data/example-conspect/`
-- локальные кластеры: `data/example-clusters/example-local-clusters/`
-- локальные планы: `data/example-plan/example-local-plan/`
-- глобальные планы: `data/example-plan/example-global-plan/`
-- глобальные кластеры: `data/example-clusters/example-global-clusters/`
-- Markdown-экспорт: `data/example-final-conspect/`
+| Directory | Artifact |
+| --- | --- |
+| `data/example-transcrib/` | Сырая транскрибация после FasterWhisper |
+| `data/example-mini-conspect/` | Качественная транскрибация|
+| `data/example-clusters/example-local-clusters/` | Локальные  кластеры |
+| `data/example-plan/example-local-plan/` | Локальные темы |
+| `data/example-plan/example-global-plan/` | Глобальные темы |
+| `data/example-clusters/example-global-clusters/` | Глобальные кластеры |
+| `data/example-conspect/` | Конспект в формате JSON |
+| `data/example-final-conspect/` | Конспект в формате .md |
 
-## Конфигурация
+## Configuration
 
-Основные конфигурационные файлы:
+Основные конфиги расположены в `src/configs/config-agents/`:
 
-- `src/configs/config-agents/stt/config_stt.yaml`
-- `src/configs/config-agents/drafter/config_drafter.yaml`
-- `src/configs/config-agents/local_planner/config_local_planner.yaml`
-- `src/configs/config-agents/global_planner/config_global_planner.yaml`
-- `src/configs/config-agents/synthesizer/config_synthesizer.yaml`
-- `src/configs/config-agents/*/prompt_*.yaml`
-- `src/configs/bad_words.py`
-- `src/configs/ai_configs.py`
+- `stt/config_stt.yaml` - FasterWhisper, VAD и параметры транскрибации;
+- `drafter/config_drafter.yaml` - модель, generation parameters и путь к prompt-файлу Drafter-а;
+- `local_planner/config_local_planner.yaml` - параметры локального планировщика;
+- `global_planner/config_global_planner.yaml` - параметры глобального планировщика;
+- `synthesizer/config_synthesizer.yaml` - параметры Synthesizer-а;
+- `*/prompt_*.yaml` - системные промпты и user templates агентов.
 
-Через них настраиваются:
+Текущая конфигурация по умолчанию:
 
-- выбор моделей
-- параметры генерации
-- шаблоны промптов
-- выходные директории
-- поведение STT
-- правила очистки генерации
+| Component | Default |
+| --- | --- |
+| STT | `large-v3-turbo` |
+| LLM backend | `llama.cpp` |
+| GGUF model | `.models/T-lite-it-2.1-Q5_K_M.gguf` |
+| LLM context | `n_ctx: 8192` |
+| Local embeddings | `cointegrated/rubert-tiny2` |
+| Global embeddings | `intfloat/multilingual-e5-small` |
 
-Сейчас CLI использует встроенные YAML-конфиги. Ветка для пользовательского `--config_path` пока зарезервирована на будущее.
-
-## Структура репозитория
-
-```text
-src/
-  agents/      # drafter, planners, synthesizer
-  core/        # STT, clustering, pipeline, utilities
-  configs/     # dataclasses, prompts, bad words, YAML configs
-  tests/       # тестовые конфигурационные фикстуры
-
-data/
-  example-audio/
-  example-transcrib/
-  example-conspect/
-  example-plan/
-  example-clusters/
-  example-final-conspect/
-
-.models/
-  # локальные GGUF-веса для llama_cpp
-```
-
-## Исследовательские заметки
-
-Этот репозиторий задуман как исследовательская база, а не как отполированный пользовательский продукт. Многостадийная архитектура удобна для:
-
-- ручного анализа промежуточных результатов
-- абляционных экспериментов по стадиям
-- последующего построения бенчмарка
-- подготовки статьи и воспроизводимых экспериментов
-
-Текущие ограничения:
-
-- проект в первую очередь настроен на русскоязычные STEM-лекции
-- качество результата по-прежнему сильно зависит от точности транскрипции
-- автоматическая оценка пока ограничена
-- Markdown-экспорт является легким форматтером поверх итогового JSON-конспекта
-
-## Цитирование
-
-```bibtex
-@misc{longconspectwriter,
-  title  = {LongConspectWriter},
-  author = {TODO},
-  year   = {2026},
-  note   = {Исследовательский прототип; замените на финальные метаданные arXiv}
-}
-```
-
-## Лицензия
-
-Проект распространяется под [MIT License](LICENSE).
+Дополнительные dataclass-описания конфигураций находятся в `src/configs/ai_configs.py`; список нежелательных генеративных фрагментов - в `src/configs/bad_words.py`.

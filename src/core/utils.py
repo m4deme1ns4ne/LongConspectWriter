@@ -7,13 +7,33 @@ import time
 from razdel import sentenize
 import sys
 from dataclasses import dataclass
+import re
 
 
 class TextsSplitter:
     @staticmethod
     def split_text_to_sentences(text: str) -> list[str]:
-        sentences = list(sentenize(text))
+        cleaned_text = TextsSplitter._sanitize_drafter_text(text)
+        sentences = list(sentenize(cleaned_text))
         return [sentence.text for sentence in sentences]
+    
+    @staticmethod
+    def _sanitize_drafter_text(text: str) -> str:
+        """
+        Нормализатор "грязного" текста от LLM. 
+        Восстанавливает пунктуацию для корректной работы razdel.
+        """
+        # 1. Защита от "потерянных" точек перед переносом строки.
+        # Если перед \n нет знака препинания (., !, ?, :, ;), ставим точку принудительно.
+        text = re.sub(r'(?<![\.\!\?\:\;])(\s*\n)', r'.\1', text)
+
+        # 2. Гарантия точки после семантических тегов.
+        text = re.sub(r'(\[[А-ЯЁA-Z]+\])(?!\s*[\.\!\?\,\:])', r'\1.', text)
+
+        # 3. Базовая очистка мусорных пробелов, чтобы не плодить пустые токены
+        text = re.sub(r'[ \t]{2,}', ' ', text)
+        
+        return text
 
     @staticmethod
     def split_text_to_tokens(
