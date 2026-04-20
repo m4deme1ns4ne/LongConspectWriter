@@ -15,23 +15,23 @@
 
 ```mermaid
 flowchart TD
-    Audio["Audio / Video Stream"] --> STT["FasterWhisper (STT)"]
+    Audio["Audio"] --> STT["STT<br/>(Audio to text translation)"]
     
-    STT --> |"Raw Transcript"| Drafter["Agent: Drafter<br/>(Transcription)"]
+    STT -->  Drafter["Agent: Drafter<br/>(Cleaning up transcription and tagging)"]
     
-    Drafter --> |"Cleaned Text"| LCluster["Local Clustering<br/>(Cleaning up transcription)"]
+    Drafter -->  LCluster["Local Clustering<br/>(Cleaning up transcription)"]
     
     LCluster --> LPlanner["Agent: Local Planner<br/>(Generating Local clusters)"]
     
-    LPlanner --> GPlanner["Agent: Global Planner<br/>(Generating Local topics)"]
+    LPlanner --> GPlanner["Agent: Global Planner<br/>(Generating Global topics)"]
     
-    LCluster & GPlanner --> GCluster["Global Clustering<br/>(Linking text to chapters)"]
+    LCluster & GPlanner --> GCluster["Global Clustering<br/>(Generating Global clusters)"]
     
     GCluster --> Synthesizer["Agent: Synthesizer<br/>(Rendering of the academic summary)"]
     
     Synthesizer --> JSON["JSON Conspect"]
 
-    JSON --> MD["Markdown Export"]
+    JSON --> MD["Markdown Conspect"]
 ```
 
 ## LongConspectWriter Deployment
