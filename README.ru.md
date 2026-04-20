@@ -15,46 +15,25 @@
 
 ```mermaid
 flowchart TD
-    A["Audio Lecture<br/>audio/video stream"] -->|"VAD + transcription"| B["FasterWhisper STT<br/>large-v3-turbo"]
-    A -.->|"Acoustic Artifacts"| P1["Acoustic Artifacts"]
-    B --> C["Raw Transcript"]
-    B -.->|"Transcription Noise"| P2["STT Noise / Transcription Noise"]
-
-    subgraph E2E["Naive End-to-End path: error amplification"]
-        N1["Raw transcript as one long prompt"] --> N2["Lost in the Middle"]
-        N2 --> N3["Generation Bias"]
-        N3 --> N4["Semantic Collapse<br/>compressed or incomplete conspect"]
-    end
-
-    C -.->|"uncontrolled long context"| N1
-    P1 -.->|"propagates"| N1
-    P2 -.->|"propagates"| N1
-
-    subgraph LCW["LongConspectWriter: decomposed A2LCG pipeline"]
-        C -->|"noise reduction"| D["Drafter<br/>aggressive academic cleaning"]
-        D -->|"E5-compatible formula normalization"| E["Flat Formula Text"]
-        D -->|"semantic tagging"| F["Semantic Tags<br/>[ОПР] / [ТЕО] / [ФОР]"]
-        E --> G["Cleaned Semantic Draft"]
-        F --> G
-
-        G --> H["Local Clustering<br/>sentence-level semantic grouping"]
-        H -->|"micro-topic extraction"| I["Local Planner"]
-        I -->|"chapter plan"| J["Global Planner<br/>JSON outline"]
-        J -->|"chapter-aligned retrieval"| K["Global Clustering"]
-        H --> K
-
-        K --> L["Synthesizer<br/>stateful long-form generation"]
-        L -->|"LaTeX compilation"| M["JSON Conspect"]
-        M --> O["Markdown Export"]
-
-        L <-->|"context state"| S1["rolling_summary"]
-        L <-->|"safe chunk boundary"| S2["last_tail"]
-        S1 -->|"if > 1024 history tokens"| S3["mega_compressor"]
-        S3 -->|"state compression<br/>math tags and LaTeX are invariant"| S1
-    end
-
-    P2 -.->|"localized before synthesis"| D
-    N4 -.->|"avoided by staged control"| D
+    Audio["Audio / Video Stream"] --> STT["FasterWhisper (STT)"]
+    
+    STT --> |"Raw Transcript"| Drafter["Agent: Drafter<br/>(Очистка и тегирование)"]
+    
+    Drafter --> |"Cleaned Text"| LCluster["Local Clustering<br/>(Разбивка на блоки)"]
+    
+    LCluster --> LPlanner["Agent: Local Planner<br/>(Генерация микротем)"]
+    
+    LPlanner --> GPlanner["Agent: Global Planner<br/>(Сборка оглавления)"]
+    
+    LCluster & GPlanner --> GCluster["Global Clustering<br/>(Привязка текста к главам)"]
+    
+    GCluster --> Synthesizer["Agent: Synthesizer<br/>(Рендеринг конспекта)"]
+    
+    %% Состояние контекста сбоку, чтобы не ломать прямую линию
+    State[("State Management<br/>(rolling_summary, mega_compressor)")] <-.-|Context Sync| Synthesizer
+    
+    Synthesizer --> JSON["JSON Conspect"]
+    JSON --> MD["Markdown Export"]
 ```
 
 ## LongConspectWriter Deployment
