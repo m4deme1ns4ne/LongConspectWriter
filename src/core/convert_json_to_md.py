@@ -1,6 +1,7 @@
 import json
 import os
 import time
+from loguru import logger
 
 
 def convert_json_to_md(path, output_path="data/example-final-conspect"):
@@ -27,7 +28,10 @@ def convert_json_to_md(path, output_path="data/example-final-conspect"):
         with open(out_filepath, "w", encoding="utf-8") as f:
             f.write(final_conspect)
 
+        logger.success(
+            f"Итоговый отформатированный конспект успешно сохранен по пути: {out_filepath}"
+        )
         return out_filepath
 
 
-# convert_json_to_md("data/example-conspect/T-lite-it-2_1-Q4_K_M_gguf-intfloat_multilingual-e5-small-1776515042.json-1776515434.json")
+# convert_json_to_md("data/example-conspect\T-lite-it-2_1-Q5_K_M_gguf-intfloat_multilingual-e5-small-1776631396.json-1776633157.json")

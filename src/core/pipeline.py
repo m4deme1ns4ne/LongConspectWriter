@@ -277,13 +277,6 @@ class LongConspectPipeline(Trackable):
 
         final_conspect_path = convert_json_to_md(path=conspect_path)
 
-        # Потом убрать и что то нормальное придумать
-        from loguru import logger
-
-        logger.success(
-            f"Итоговый отформатированный конспект успешно сохранен по пути: {final_conspect_path}"
-        )
-
         return final_conspect_path
 
 
