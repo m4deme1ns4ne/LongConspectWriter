@@ -19,4 +19,6 @@ gen_config:
     threshold: 0.7
 
 app_config:
-  output_dir: "data/example-transcrib"
+  agent_name: "stt"
+  prompt_path: "src/configs/config-agents/stt/prompt_stt.yaml"
+  the_subject_lecture: null

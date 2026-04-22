@@ -5,21 +5,23 @@ import os
 import sys
 from src.core.base import BaseLlamaCppAgent
 from pathlib import Path
-from src.core.utils import SEPARATOR, ColoursForTqdm
+from src.core.utils import ColoursForTqdm
+import json
+import ast
 
 
 class AgentLocalPlanner(BaseLlamaCppAgent):
-    def __init__(self, init_config, gen_config, app_config):
+    def __init__(self, init_config, gen_config, app_config, session_dir: Path):
+        self.session_dir = session_dir
         super().__init__(init_config, gen_config, app_config)
 
-    def _chunking(self, text: str, max_tokens: int):
-        local_clusters = text.split(f"\n\n{SEPARATOR}\n\n")
+    def _chunking(self, text: list, max_tokens: int):
 
         final_batches = []
         current_batch = []
         current_tokens = 0
 
-        for chunk in local_clusters:
+        for chunk in text:
             tokenized_chunk = len(self.model.tokenize(chunk.encode("utf-8")))
             len_chunk_tokens = tokenized_chunk
 
@@ -42,7 +44,9 @@ class AgentLocalPlanner(BaseLlamaCppAgent):
 
     def run(self, path: Path) -> str:
         with open(path, "r", encoding="utf-8") as file:
-            local_clusters = file.read()
+            local_clusters = json.load(file)
+
+        local_clusters = list(local_clusters.values())
 
         max_tokens = int(self._gen_config.max_tokens * 2)
         chunking_local_clusters = self._chunking(local_clusters, max_tokens)
@@ -87,33 +91,27 @@ class AgentLocalPlanner(BaseLlamaCppAgent):
 
         logger.info("Генерация локальных заголовков завершена.")
 
-        final_drafts = f"\n\n{SEPARATOR}\n\n".join(final_drafts)
-
-        timestamp = int(time.time())
-        safe_model_name = self._init_config.model_path.replace("/", "_")
-        pure_draft_name = os.path.basename(path)
-        out_path = os.path.join(
-            self._app_config.output_dir,
-            f"{safe_model_name}-{pure_draft_name}-{timestamp}.md",
+        full_local_plan = " ".join(final_drafts)
+        response_dict = {"answer_agent": full_local_plan}
+        out_filepath = self._safe_result_out_line(
+            output_dict=response_dict,
+            stage="03_local_planners/",
+            file_name="out_filepath.json",
+            session_dir=self.session_dir,
         )
-
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        with open(out_path, "x", encoding="utf-8") as f:
-            f.write(final_drafts)
-        logger.success(f"Локальные заголовки сохранены: {out_path}")
-        return out_path
+        return out_filepath
 
 
 class AgentGlobalPlanner(BaseLlamaCppAgent):
-    def __init__(self, init_config, gen_config, app_config):
+    def __init__(self, init_config, gen_config, app_config, session_dir: Path):
+        self.session_dir = session_dir
         super().__init__(init_config, gen_config, app_config)
 
     def run(self, path: Path) -> str:
         with open(path, "r", encoding="utf-8") as file:
-            local_plan = file.read()
+            local_plan = json.load(file)
 
-        local_plan = local_plan.replace(f"\n\n{SEPARATOR}\n\n", "\n")
-
+        local_plan = local_plan["answer_agent"]
         with tqdm(
             total=self._gen_config.max_tokens,
             desc="Генерация токенов",
@@ -131,16 +129,14 @@ class AgentGlobalPlanner(BaseLlamaCppAgent):
             )
         logger.info("Генерация глобальных заголовков завершена.")
 
-        timestamp = int(time.time())
-        safe_model_name = self._init_config.model_path.replace("/", "_")
-        pure_draft_name = os.path.basename(path)
-        out_path = os.path.join(
-            self._app_config.output_dir,
-            f"{safe_model_name}-{pure_draft_name}-{timestamp}.json",
+        response_dict = ast.literal_eval(response)
+
+        out_filepath = self._safe_result_out_line(
+            output_dict=response_dict,
+            stage="04_global_planners/",
+            file_name="out_filepath.json",
+            session_dir=self.session_dir,
         )
 
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        with open(out_path, "x", encoding="utf-8") as f:
-            f.write(response)
-        logger.success(f"Глобальные заголовки сохранены: {out_path}")
-        return out_path
+        logger.success(f"Глобальные заголовки сохранены: {out_filepath}")
+        return out_filepath

@@ -2,34 +2,49 @@ import os
 import yaml
 import argparse
 from pathlib import Path
-import warnings
+# import warnings
 
 from dotenv import load_dotenv
 from loguru import logger
 from tqdm import tqdm
 
-from src.core.pipeline import LongConspectPipeline
-from src.configs.ai_configs import (
-    AppLLMConfig,
+from src.core.pipeline import LongConspectWriterPipeline
+from src.configs.configs import (
     AppSTTConfig,
-    LlamaCppGenConfig,
-    LlamaCppInitConfig,
     STTGenConfig,
     STTInitConfig,
+    LLMInitConfig,
+    LLMGenConfig,
+    LLMAppConfig,
+    PipelineConfig,
 )
 
-# Оставляем только нужные системные фиксы, мусор от transformers удален
-warnings.filterwarnings("ignore", category=UserWarning)
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+# # Оставляем только нужные системные фиксы, мусор от transformers удален
+# warnings.filterwarnings("ignore", category=UserWarning)
+# os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
-def load_configs(yaml_path, cls_init_config, cls_gen_config, cls_app_config):
+def load_configs(
+    yaml_path,
+    cls_init_config=None,
+    cls_gen_config=None,
+    cls_app_config=None,
+):
     with open(yaml_path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
 
-    init_config = cls_init_config(**config.get("init_config", {}))
-    gen_config = cls_gen_config(**config.get("gen_config", {}))
-    app_config = cls_app_config(**config.get("app_config", {}))
+    if cls_init_config is None:
+        init_config = None
+    else:
+        init_config = cls_init_config(**config.get("init_config", {}))
+    if cls_gen_config is None:
+        gen_config = None
+    else:
+        gen_config = cls_gen_config(**config.get("gen_config", {}))
+    if cls_app_config is None:
+        app_config = None
+    else:
+        app_config = cls_app_config(**config.get("app_config", {}))
 
     return init_config, gen_config, app_config
 
@@ -44,7 +59,7 @@ def main() -> None:
     )
 
     parser = argparse.ArgumentParser(
-        description="CLI для управления MAS LongConspectWriter."
+        description="CLI для управления LongConspectWriter."
     )
     parser.add_argument(
         "--action",
@@ -89,7 +104,11 @@ def main() -> None:
         help="Путь к конфигу",
     )
     args = parser.parse_args()
-    action = args.action
+
+    args.output_file_path = "src/configs/config_pipeline.yaml"
+    _, _, pipeline_config = load_configs(
+        args.output_file_path, cls_app_config=PipelineConfig
+    )
 
     if args.config_path is None:
         # 1. Загрузка STT
@@ -103,35 +122,36 @@ def main() -> None:
         # 2. Загрузка Drafter
         drafter_init, drafter_gen, drafter_app = load_configs(
             "src/configs/config-agents/drafter/config_drafter.yaml",
-            LlamaCppInitConfig,
-            LlamaCppGenConfig,
-            AppLLMConfig,
+            LLMInitConfig,
+            LLMGenConfig,
+            LLMAppConfig,
         )
 
         # 3. Загрузка Synthesizer
         synth_init, synth_gen, synth_app = load_configs(
             "src/configs/config-agents/synthesizer/config_synthesizer.yaml",
-            LlamaCppInitConfig,
-            LlamaCppGenConfig,
-            AppLLMConfig,
+            LLMInitConfig,
+            LLMGenConfig,
+            LLMAppConfig,
         )
 
         # 4. Загрузка Local Planner
         lp_init, lp_gen, lp_app = load_configs(
             "src/configs/config-agents/local_planner/config_local_planner.yaml",
-            LlamaCppInitConfig,
-            LlamaCppGenConfig,
-            AppLLMConfig,
+            LLMInitConfig,
+            LLMGenConfig,
+            LLMAppConfig,
         )
 
         # 5. Загрузка Global Planner
         gp_init, gp_gen, gp_app = load_configs(
             "src/configs/config-agents/global_planner/config_global_planner.yaml",
-            LlamaCppInitConfig,
-            LlamaCppGenConfig,
-            AppLLMConfig,
+            LLMInitConfig,
+            LLMGenConfig,
+            LLMAppConfig,
         )
-        pipeline = LongConspectPipeline(
+        pipeline = LongConspectWriterPipeline(
+            pipeline_config,
             stt_init,
             stt_gen,
             stt_app,
@@ -149,10 +169,10 @@ def main() -> None:
             gp_app,
         )
     else:
-        ...
-        # Архитектура с разными конфигами пока не реализованна
+        logger.warning("Архитектура с единым конфигом пока не реализована.")
+        return
 
-    if action == "global_clustering":
+    if args.action == "global_clustering":
         if args.global_plan_path is None:
             logger.critical("Аргумент --global_plan_path не передан при запуске.")
             return
@@ -185,31 +205,31 @@ def main() -> None:
             logger.critical(f"Файл не существует. Путь до файла: {path_to_file}")
             return
 
-        if action == "all":
+        if args.action == "all":
             output_path = pipeline.run(path_to_file)
 
-        elif action == "stt":
+        elif args.action == "stt":
             output_path = pipeline._call_stt(path_to_file)
 
-        elif action == "drafter":
+        elif args.action == "drafter":
             output_path = pipeline._call_drafter(path_to_file)
 
-        elif action == "synthesizer":
+        elif args.action == "synthesizer":
             output_path = pipeline._call_synthesizer(path_to_file)
 
-        elif action == "planner":
+        elif args.action == "planner":
             output_path = pipeline._call_planner(path_to_file)
 
-        elif action == "local_planner":
+        elif args.action == "local_planner":
             output_path = pipeline._call_local_planner(path_to_file)
 
-        elif action == "global_planner":
+        elif args.action == "global_planner":
             output_path = pipeline._call_global_planner(path_to_file)
 
-        elif action == "local_clustering":
+        elif args.action == "local_clustering":
             output_path = pipeline._call_local_clustering(path_to_file)
 
-        elif action == "clustering":
+        elif args.action == "clustering":
             output_path = pipeline._call_clustering(path_to_file)
 
     if output_path is not None:

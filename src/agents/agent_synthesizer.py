@@ -13,7 +13,8 @@ from src.configs.bad_words import BAD_WORDS_SYNTHESIZER
 
 
 class AgentSynthesizerLlama(BaseLlamaCppAgent):
-    def __init__(self, init_config, gen_config, app_config):
+    def __init__(self, init_config, gen_config, app_config, session_dir: Path):
+        self.session_dir = session_dir
         super().__init__(init_config, gen_config, app_config)
 
     def run(self, path: Path) -> str:
@@ -197,18 +198,12 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
 
         logger.info("Генерация финального конспекта завершена.")
 
-        timestamp = int(time.time())
-        safe_model_name = os.path.basename(self._init_config.model_path).replace(
-            ".", "_"
-        )
-        pure_draft_name = os.path.basename(path)
-        out_filepath = os.path.join(
-            self._app_config.output_dir,
-            f"{safe_model_name}-{pure_draft_name}-{timestamp}.json",
+        out_filepath = self._safe_result_out_line(
+            output_dict=conspect,
+            stage="06_synthesizer/",
+            file_name="conspect.json",
+            session_dir=self.session_dir,
         )
 
-        os.makedirs(os.path.dirname(out_filepath), exist_ok=True)
-        with open(out_filepath, "w", encoding="utf-8") as file:
-            json.dump(conspect, file, ensure_ascii=False, indent=4)
         logger.success(f"Финальный конспект сохранен: {out_filepath}")
         return out_filepath

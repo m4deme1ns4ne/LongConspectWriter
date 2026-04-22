@@ -18,4 +18,3 @@ gen_config:
 app_config:
   agent_name: "drafter"
   prompt_path: "src/configs/config-agents/drafter/prompt_drafter.yaml"
-  output_dir: "data/example-conspect"

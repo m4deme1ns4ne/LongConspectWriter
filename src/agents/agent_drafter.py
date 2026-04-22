@@ -95,21 +95,8 @@ class AgentDrafterLlama(BaseLlamaCppAgent):
                     f"Чанк {i}: {orig_tokens} -> {clean_tokens} токенов | Сжатие: {compression:.1f}%"
                 )
 
-        safe_model_name = self._init_config.model_path.replace("/", "_")
+        self._safe_result_out_line(output_text=...)
 
-        pure_transcrib_file_name = os.path.basename(path_transcrib)
-
-        timestamp = int(time.time())
-        out_filepath = os.path.join(
-            self._app_config.output_dir,
-            f"{safe_model_name}-{pure_transcrib_file_name}-{timestamp}.txt",
-        )
-
-        os.makedirs(os.path.dirname(out_filepath), exist_ok=True)
-        with open(out_filepath, "w", encoding="utf-8") as f:
-            f.write(final_drafts)
-
-        logger.success(f"Очищенная транскрибация сохранена: {out_filepath}")
         if ignored_chunks:
             logger.debug(
                 f"Пропущено пустых чанков: {ignored_chunks}, потенциальная экономия: "

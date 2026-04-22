@@ -22,6 +22,7 @@ dependencies = [
     "torch>=2.4.1",
     "tqdm>=4.66.5",
     "umap-learn>=0.5.12",
+    "whisper-normalizer>=0.1.12",
 ]
 
 [[tool.uv.index]]

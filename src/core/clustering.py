@@ -3,14 +3,11 @@ from sklearn.cluster import AgglomerativeClustering
 from src.core.utils import TextsSplitter
 from loguru import logger
 import numpy as np
-import time
-import os
 from pathlib import Path
-from src.core.utils import SEPARATOR
 import json
 from sentence_transformers import util
 import torch
-from src.core.base import Trackable
+from src.core.base import BaseClusterizer
 
 
 class Visualize_clustering_metrics:
@@ -44,20 +41,17 @@ class Visualize_clustering_metrics:
         pass
 
 
-class BaseClusterizer(Trackable):
-    pass
-
-
 class SemanticLocalClusterizer(BaseClusterizer):
-    def __init__(self, model_name):
+    def __init__(self, model_name, session_dir: Path):
         self.model_name = model_name
         self.model = SentenceTransformer(model_name)
+        self.session_dir = session_dir
 
     def run(self, path):
         with open(path, "r", encoding="utf-8") as file:
-            transcrib = file.read()
+            transcrib = json.load(file)
 
-        sentences = TextsSplitter.split_text_to_sentences(transcrib)
+        sentences = TextsSplitter.split_text_to_sentences(transcrib["answer_agent"])
         logger.info(f"Всего предложений: {len(sentences)}")
 
         embeddings = self.model.encode(sentences)
@@ -75,23 +69,13 @@ class SemanticLocalClusterizer(BaseClusterizer):
 
         clusters = self._format_cluster_output(sentences, labels)
 
-        monolith_draft = f"\n\n{SEPARATOR}\n\n".join(clusters)
-
-        safe_model_name = self.model_name.replace("/", "_")
-
-        pure_transcrib_file_name = os.path.basename(path)
-
-        timestamp = int(time.time())
-        out_filepath = os.path.join(
-            Path("data/example-clusters/example-local-clusters"),
-            f"{safe_model_name}-{pure_transcrib_file_name}-{timestamp}.txt",
+        out_filepath = self._safe_result_out_line(
+            output_dict=clusters,
+            stage="02_local_clusters/",
+            file_name="out_filepath.json",
+            session_dir=self.session_dir,
         )
 
-        os.makedirs(os.path.dirname(out_filepath), exist_ok=True)
-        with open(out_filepath, "w", encoding="utf-8") as f:
-            f.write(monolith_draft)
-
-        logger.success(f"Локальные кластеры сохранены в {out_filepath}")
         logger.info(f"Локальных кластеров: {len(clusters)}")
         logger.debug(f"Type local clusters: {type(clusters)}")
 
@@ -114,13 +98,18 @@ class SemanticLocalClusterizer(BaseClusterizer):
 
         new_grouped_data = [" ".join(_["text"]) for _ in new_grouped_data]
 
-        return new_grouped_data
+        formated_clusters = {}
+        for i, cluster in enumerate(new_grouped_data):
+            formated_clusters[i] = cluster
+
+        return formated_clusters
 
 
 class SemanticGlobalClusterizer(BaseClusterizer):
-    def __init__(self, model_name):
+    def __init__(self, model_name, session_dir: Path):
         self.model_name = model_name
         self.model = SentenceTransformer(model_name)
+        self.session_dir = session_dir
 
     def run(self, plan_path, local_clusters_path):
 
@@ -128,11 +117,9 @@ class SemanticGlobalClusterizer(BaseClusterizer):
             global_plan = json.load(file)
 
         with open(local_clusters_path, "r", encoding="utf-8") as file:
-            local_clusters = file.read()
-
-        local_clusters = [
-            chunk.strip() for chunk in local_clusters.split(SEPARATOR) if chunk.strip()
-        ]
+            local_clusters_dict = json.load(file)
+        
+        local_clusters = list(local_clusters_dict.values())
 
         chapters = global_plan["chapters"]
         chapter_titles = [ch["chapter_title"] for ch in chapters]
@@ -165,20 +152,14 @@ class SemanticGlobalClusterizer(BaseClusterizer):
             key: value for key, value in global_clusters.items() if value
         }
 
-        safe_model_name = self.model_name.replace("/", "_")
-
-        timestamp = int(time.time())
-        out_filepath = os.path.join(
-            Path("data/example-clusters/example-global-clusters"),
-            f"{safe_model_name}-{timestamp}.json",
+        out_filepath = self._safe_result_out_line(
+            output_dict=global_clusters,
+            stage="05_global_clusters/",
+            file_name="out_filepath.json",
+            session_dir=self.session_dir,
         )
-
-        os.makedirs(os.path.dirname(out_filepath), exist_ok=True)
-        with open(out_filepath, "w", encoding="utf-8") as file:
-            json.dump(global_clusters, file, ensure_ascii=False, indent=4)
 
         logger.info(f"Глобальных кластеров: {len(global_clusters)}")
         logger.debug(f"Type local clusters: {type(global_clusters)}")
-        logger.success(f"Глобальные кластеры сохранены в {out_filepath}")
 
         return out_filepath

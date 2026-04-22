@@ -2,15 +2,20 @@ from abc import ABC, abstractmethod
 from loguru import logger
 from src.core.vram_manager import VRamCleaner
 from src.core.utils import log_execution_time, LoadPrompts, log_retry_attempt
-from src.configs.ai_configs import (
-    AppLLMConfig,
-    LlamaCppInitConfig,
-    LlamaCppGenConfig,
+from src.configs.configs import (
+    LLMInitConfig,
+    LLMGenConfig,
+    LLMAppConfig,
 )
 from dataclasses import asdict
 from tenacity import retry, stop_after_attempt, wait_fixed
 from typing import Any
 from llama_cpp import Llama
+from src.configs.configs import AppSTTConfig, STTGenConfig, STTInitConfig
+from faster_whisper import WhisperModel
+import json
+from pathlib import Path
+from datetime import datetime
 
 
 class Trackable:
@@ -26,12 +31,38 @@ class Trackable:
 
 class Base(ABC):
     """
-    Базовый класс. Классы которые его наследуют обязуются иметь метод run
+    Базовый класс всех частей пайплайна. Классы которые его наследуют обязуются иметь метод run
     """
 
     @abstractmethod
     def run(self) -> str:
         pass
+
+    def _safe_result_out_line(
+        self,
+        output_dict: dict[str, Any] | str,
+        stage: str,
+        file_name: str,
+        session_dir: Path,
+        extension: str = "json",
+    ) -> Path:
+
+        actual_stage_path = session_dir / stage
+
+        actual_stage_path.mkdir(parents=True, exist_ok=True)
+
+        output_file_path = actual_stage_path / file_name
+
+        if extension == "json":
+            with open(output_file_path, "w", encoding="utf-8") as file:
+                json.dump(output_dict, file, ensure_ascii=False, indent=4)
+        elif extension == "md":
+            with open(output_file_path, "w", encoding="utf-8") as f:
+                f.write(str(output_dict))
+        logger.success(
+            f"Работа агента {self.__class__.__name__} сохранена в файл по пути: {output_file_path}"
+        )
+        return output_file_path
 
 
 class BaseAgent(Trackable, Base):
@@ -70,9 +101,9 @@ class BaseLLMAgent(BaseAgent):
 class BaseLlamaCppAgent(BaseLLMAgent):
     def __init__(
         self,
-        init_config: LlamaCppInitConfig,
-        gen_config: LlamaCppGenConfig,
-        app_config: AppLLMConfig,
+        init_config: LLMInitConfig,
+        gen_config: LLMGenConfig,
+        app_config: LLMAppConfig,
     ) -> None:
         self._init_config = init_config
         self._gen_config = gen_config
@@ -136,8 +167,57 @@ class BaseLlamaCppAgent(BaseLLMAgent):
 
 
 class BaseSTTAgent(BaseAgent):
+    def __init__(
+        self,
+        init_config: STTInitConfig,
+        gen_config: STTGenConfig,
+        app_config: AppSTTConfig,
+    ) -> None:
+        self._init_config = init_config
+        self._gen_config = gen_config
+        self._app_config = app_config
+        logger.info(
+            f"Инициализация агента STT (Модель: {self._init_config.model_size_or_path}, Устройство: {self._init_config.device})"
+        )
+        logger.info(f"Загрузка {self._init_config.model_size_or_path} в память...")
+        self.model = WhisperModel(
+            **asdict(self._init_config),
+        )
+        logger.info(f"Модель {self._init_config.model_size_or_path} загружена.")
+
+        logger.debug(
+            f"Параметры запуска агента {self.__class__.__name__}: {self._init_config}"
+        )
+        logger.debug(
+            f"Параметры генерации агента {self.__class__.__name__}: {self._gen_config}"
+        )
+        logger.debug(
+            f"Параметры использования агента {self.__class__.__name__}: {self._app_config}"
+        )
+        self.prompt = LoadPrompts.load_prompts(self._app_config.prompt_path)
+
+        if self._app_config.the_subject_lecture is None:
+            self.initial_prompt = self.prompt[self._app_config.agent_name]["universal"]
+        else:
+            self.initial_prompt = self.prompt[self._app_config.agent_name][
+                self._app_config.the_subject_lecture
+            ]
+
+
+class BaseClusterizer(Trackable, Base):
     pass
 
 
-class Clustering(Trackable, Base):
-    pass
+class BasePipeline(Trackable, Base):
+    def __post_init__(self) -> None:
+
+        output_dir = Path(self.pipeline_config.output_dir)
+
+        self.actual_session_dir = (
+            output_dir / "runs" / datetime.now().strftime("%H.%M.%S___%Y.%m.%d")
+        )
+        self.actual_session_dir.mkdir(exist_ok=False, parents=True)
+
+        logger.success(
+            f"Папка актуальной сессии создана по пути: {self.actual_session_dir}"
+        )

@@ -9,7 +9,7 @@ init_config:
 gen_config:
   max_tokens: 2048
   repeat_penalty: 1.05
-  temperature: 0.35
+  temperature: 0
   # top_p: 0.8
   # top_k: 20
   presence_penalty: 0.0
@@ -18,4 +18,3 @@ gen_config:
 app_config:
   agent_name: "synthesizer"
   prompt_path: "src/configs/config-agents/synthesizer/prompt_synthesizer.yaml"
-  output_dir: "data/example-conspect"

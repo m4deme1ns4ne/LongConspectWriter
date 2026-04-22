@@ -1,0 +1,2 @@
+app_config:
+  output_dir: "data/"

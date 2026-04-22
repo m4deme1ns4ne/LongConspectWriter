@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from os import PathLike
 import torch
+import os
 
 
 @dataclass
@@ -41,11 +41,13 @@ class STTGenConfig:
 
 @dataclass
 class AppSTTConfig:
-    output_dir: str | PathLike
+    agent_name: str
+    prompt_path: str | os.PathLike
+    the_subject_lecture: str = None
 
 
 @dataclass
-class LlamaCppInitConfig:
+class LLMInitConfig:
     model_path: str
     n_gpu_layers: int = -1
     n_ctx: int = 8192
@@ -53,7 +55,7 @@ class LlamaCppInitConfig:
 
 
 @dataclass
-class LlamaCppGenConfig:
+class LLMGenConfig:
     max_tokens: int
     repeat_penalty: float = 1.1
     temperature: float = 0.5
@@ -64,7 +66,11 @@ class LlamaCppGenConfig:
 
 
 @dataclass
-class AppLLMConfig:
+class LLMAppConfig:
     agent_name: str
-    prompt_path: str | PathLike
-    output_dir: str | PathLike
+    prompt_path: str | os.PathLike
+
+
+@dataclass
+class PipelineConfig:
+    output_dir: str | os.PathLike

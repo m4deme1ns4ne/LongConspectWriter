@@ -1,18 +1,20 @@
-from src.core.transcribing import FasterWhisper
+from src.core.stt import FasterWhisper
 from src.agents.agent_planner import AgentLocalPlanner, AgentGlobalPlanner
 from src.core.clustering import SemanticLocalClusterizer, SemanticGlobalClusterizer
 from os import PathLike
-from src.core.base import Trackable
+from src.core.base import BasePipeline
 from src.core.utils import check_path_is
-from src.core.convert_json_to_md import convert_json_to_md
 from loguru import logger
 import multiprocessing
+from src.agents.agent_synthesizer import AgentSynthesizerLlama
+import json
 
 
 # Раздутый init потом поменять просто на датакласс
-class LongConspectPipeline(Trackable):
+class LongConspectWriterPipeline(BasePipeline):
     def __init__(
         self,
+        pipeline_config,
         stt_init_config,
         stt_gen_config,
         stt_app_config,
@@ -29,6 +31,9 @@ class LongConspectPipeline(Trackable):
         global_planner_gen_config,
         global_planner_app_config,
     ):
+        self.pipeline_config = pipeline_config
+        self.__post_init__()
+
         self.stt_init_config = stt_init_config
         self.stt_gen_config = stt_gen_config
         self.stt_app_config = stt_app_config
@@ -66,6 +71,7 @@ class LongConspectPipeline(Trackable):
                 init_config=self.stt_init_config,
                 gen_config=self.stt_gen_config,
                 app_config=self.stt_app_config,
+                session_dir=self.actual_session_dir,
             )
             transcript_path = faster_whisper.run(audio_file_path=path)
             result_queue.put({"status": "success", "path": transcript_path})
@@ -98,41 +104,41 @@ class LongConspectPipeline(Trackable):
                 "Процесс STT завершился, но не вернул результат. Возможно, произошло жесткое падение CTranslate2."
             )
 
-    @check_path_is
-    def _call_drafter(self, path: str | PathLike) -> str | PathLike | None:
-        """
-        Запускает AgentDrafter для извлечения фактов, определений и теорем.
-        Вход (path): Путь к тематическому кластеру (результат глобальной кластеризации).
-        Выход: Путь к файлу с мини-конспектами и плейсхолдерами {{formula}}, {{figure}}.
-                None если Drafter не нашёл академического контента.
-        """
-        backend = getattr(self.drafter_init_config, "backend", "llamacpp")
+    # @check_path_is
+    # def _call_drafter(self, path: str | PathLike) -> str | PathLike | None:
+    #     """
+    #     Запускает AgentDrafter для извлечения фактов, определений и теорем.
+    #     Вход (path): Путь к тематическому кластеру (результат глобальной кластеризации).
+    #     Выход: Путь к файлу с мини-конспектами и плейсхолдерами {{formula}}, {{figure}}.
+    #             None если Drafter не нашёл академического контента.
+    #     """
+    #     backend = getattr(self.drafter_init_config, "backend", "llamacpp")
 
-        if backend == "llamacpp":
-            logger.info("Запуск Драфтера через Llama.cpp (Оптимальный режим)")
-            from src.agents.agent_drafter import AgentDrafterLlama
+    #     if backend == "llamacpp":
+    #         logger.info("Запуск Драфтера через Llama.cpp (Оптимальный режим)")
+    #         from src.agents.agent_drafter import AgentDrafterLlama
 
-            with AgentDrafterLlama(
-                init_config=self.drafter_init_config,
-                gen_config=self.drafter_gen_config,
-                app_config=self.drafter_app_config,
-            ) as drafter:
-                new_path = drafter.run(path)
+    #         with AgentDrafterLlama(
+    #             init_config=self.drafter_init_config,
+    #             gen_config=self.drafter_gen_config,
+    #             app_config=self.drafter_app_config,
+    #         ) as drafter:
+    #             new_path = drafter.run(path)
 
-        elif backend == "transformers":
-            logger.info("Запуск Драфтера через Transformers (Режим совместимости)")
-            from src.agents.agent_drafter import AgentDrafterTransformers
+    #     elif backend == "transformers":
+    #         logger.info("Запуск Драфтера через Transformers (Режим совместимости)")
+    #         from src.agents.agent_drafter import AgentDrafterTransformers
 
-            with AgentDrafterTransformers(
-                init_config=self.drafter_init_config,
-                gen_config=self.drafter_gen_config,
-                app_config=self.drafter_app_config,
-            ) as drafter:
-                new_path = drafter.run(path)
-        else:
-            raise ValueError(f"Неизвестный бэкенд для Синтезатора: {backend}")
+    #         with AgentDrafterTransformers(
+    #             init_config=self.drafter_init_config,
+    #             gen_config=self.drafter_gen_config,
+    #             app_config=self.drafter_app_config,
+    #         ) as drafter:
+    #             new_path = drafter.run(path)
+    #     else:
+    #         raise ValueError(f"Неизвестный бэкенд для Синтезатора: {backend}")
 
-        return new_path
+    #     return new_path
 
     @check_path_is
     def _call_local_clustering(self, path: str | PathLike) -> str | PathLike:
@@ -143,7 +149,9 @@ class LongConspectPipeline(Trackable):
         """
         # Пока захардкодил. Потом добавить в конфиг
         model_name = "cointegrated/rubert-tiny2"
-        model_local_clustering = SemanticLocalClusterizer(model_name)
+        model_local_clustering = SemanticLocalClusterizer(
+            model_name, session_dir=self.actual_session_dir
+        )
         new_path = model_local_clustering.run(path)
         return new_path
 
@@ -158,13 +166,17 @@ class LongConspectPipeline(Trackable):
             init_config=self.local_planner_init_config,
             gen_config=self.local_planner_gen_config,
             app_config=self.local_planner_app_config,
+            session_dir=self.actual_session_dir,
         ) as planner:
             new_path = planner.run(path)
             return new_path
 
     # Тут надо будеь пошаманить, чтобы он выдавал идельное кол во глав, может как то математически расчитывал...
     @check_path_is
-    def _call_global_planner(self, path: str | PathLike) -> str | PathLike:
+    def _call_global_planner(
+        self,
+        path: str | PathLike,
+    ) -> str | PathLike:
         """
         Собирает микро-темы в финальное оглавление (LLM Reduce).
         Вход (path): Путь к списку микро-тем (результат LocalPlanner).
@@ -174,12 +186,16 @@ class LongConspectPipeline(Trackable):
             init_config=self.global_planner_init_config,
             gen_config=self.global_planner_gen_config,
             app_config=self.global_planner_app_config,
+            session_dir=self.actual_session_dir,
         ) as planner:
             new_path = planner.run(path)
             return new_path
 
     @check_path_is
-    def _call_planner(self, path: str | PathLike) -> str | PathLike:
+    def _call_planner(
+        self,
+        path: str | PathLike,
+    ) -> str | PathLike:
         """
         Оркестратор планирования (Local -> Global).
         Вход (path): Путь к локальным кластерам (сырые абзацы).
@@ -192,7 +208,9 @@ class LongConspectPipeline(Trackable):
 
     @check_path_is
     def _call_global_clustering(
-        self, global_plan_path: str | PathLike, local_clusters_path: str | PathLike
+        self,
+        global_plan_path: str | PathLike,
+        local_clusters_path: str | PathLike,
     ) -> str | PathLike:
         """
         Связывает оригинальные абзацы с главами оглавления через косинусное сходство.
@@ -203,13 +221,18 @@ class LongConspectPipeline(Trackable):
         """
         # Пока захардкодил. Потом добавить в конфиг
         model_name = "intfloat/multilingual-e5-small"
-        model_global_clustering = SemanticGlobalClusterizer(model_name)
+        model_global_clustering = SemanticGlobalClusterizer(
+            model_name, session_dir=self.actual_session_dir
+        )
         new_path = model_global_clustering.run(global_plan_path, local_clusters_path)
 
         return new_path
 
     @check_path_is
-    def _call_clustering(self, path: str | PathLike) -> str | PathLike:
+    def _call_clustering(
+        self,
+        path: str | PathLike,
+    ) -> str | PathLike:
         """
         Главный оркестратор всей логики кластеризации текста.
         Вход (path): Путь к сырой транскрипции (результат STT).
@@ -222,42 +245,48 @@ class LongConspectPipeline(Trackable):
         return new_path
 
     @check_path_is
-    def _call_synthesizer(self, path: str | PathLike) -> str | PathLike:
+    def _call_synthesizer(
+        self,
+        path: str | PathLike,
+    ) -> str | PathLike:
         """
         Запускает AgentSynthesizer (LongWriter) для синтеза финального конспекта.
         """
-        backend = getattr(self.synthesizer_app_config, "backend", "llamacpp")
 
-        if backend == "llamacpp":
-            logger.info("Запуск Синтезатора через Llama.cpp (Оптимальный режим)")
-            from src.agents.agent_synthesizer import AgentSynthesizerLlama
-
-            with AgentSynthesizerLlama(
-                init_config=self.synthesizer_init_config,
-                gen_config=self.synthesizer_gen_config,
-                app_config=self.synthesizer_app_config,
-            ) as synthesizer:
-                new_path = synthesizer.run(path)
-
-        elif backend == "transformers":
-            logger.info("Запуск Синтезатора через Transformers (Режим совместимости)")
-            from src.agents.agent_synthesizer import AgentSynthesizerTransformers
-
-            with AgentSynthesizerTransformers(
-                init_config=self.synthesizer_init_config,
-                gen_config=self.synthesizer_gen_config,
-                app_config=self.synthesizer_app_config,
-            ) as synthesizer:
-                new_path = synthesizer.run(path)
-        else:
-            raise ValueError(f"Неизвестный бэкенд для Синтезатора: {backend}")
+        logger.info("Запуск Синтезатора через Llama.cpp (Оптимальный режим)")
+        with AgentSynthesizerLlama(
+            init_config=self.synthesizer_init_config,
+            gen_config=self.synthesizer_gen_config,
+            app_config=self.synthesizer_app_config,
+            session_dir=self.actual_session_dir,
+        ) as synthesizer:
+            new_path = synthesizer.run(path)
 
         return new_path
 
-    # Hallucination Detection: У них реализован отдельный многослойный модуль детекции галлюцинаций (синтаксический, семантический и entailment-check).
-    # Это то, чего пока не хватает в пайплайне. Малые модели (1.5B/3B) любят придумывать формулы.
-    # Добавление агента-валидатора в конец пайплайна, который сверял бы финальный Markdown с сырым транскриптом на предмет фактологии, вывело бы проект на
-    # индустриальный уровень.
+    def convert_json_to_md(self, path):
+        with open(path, "r", encoding="utf-8") as file:
+            conspect = json.load(file)
+
+            final_conspect = """**Этот конспект сгенерирован с помощью AI.**\n**Система может допускать ошибки в формулах, вычислениях и специфической терминологии.**\n**Пожалуйста, относитесь с понимаем и проверяйте конспект!**\n\n"""
+
+            for topik, body in conspect.items():
+                final_conspect += f"# {topik}\n\n"
+                if isinstance(body, list):
+                    text_body = "\n\n".join(str(item) for item in body)
+                else:
+                    text_body = str(body)
+                final_conspect += f"{text_body}\n\n"
+
+            out_filepath = self._safe_result_out_line(
+                            output_dict=final_conspect,
+                            stage="07_conspect_md",
+                            file_name="conspect.md",
+                            session_dir=self.actual_session_dir,
+                            extension="md",
+                        )
+
+            return out_filepath
 
     def run(self, audio_file_path: str | PathLike) -> str | None:
         """
@@ -269,27 +298,12 @@ class LongConspectPipeline(Trackable):
         """
         transcript_path = self._call_stt(audio_file_path)
 
-        compressed_transcript_path = self._call_drafter(transcript_path)
+        # compressed_transcript_path = self._call_drafter(transcript_path)
 
-        clustering_path = self._call_clustering(compressed_transcript_path)
+        clustering_path = self._call_clustering(transcript_path)
 
         conspect_path = self._call_synthesizer(clustering_path)
 
-        final_conspect_path = convert_json_to_md(path=conspect_path)
+        final_conspect_path = self.convert_json_to_md(path=conspect_path)
 
         return final_conspect_path
-
-
-# Нужно теперь улучшать качество, для этого нужно добавить нормальные пути
-# типо, создаем папку и там пишем stage
-# Каждый в своем файле но главное это промеж этапы
-
-
-# ROUGE для тестов обязательно
-# Где ROUGE работает отлично: На этапе AgentDrafter. Ты можешь взять сырой кусок транскрипта и сжатый драфт, и посмотреть ROUGE-L
-# (насколько сохранились ключевые последовательности слов).
-
-# Где ROUGE провалится: На этапе AgentSynthesizer. Синтезатор переписывает разговорный текст в академический, меняя структуру предложений, переводя слова в математику.
-# Если ты сравнишь текст препода с академическим финалом через ROUGE, скор будет на дне, хотя конспект может быть идеальным по смыслу.
-
-# Для оценки финального конспекта в GenAI сейчас используют LLM-as-a-Judge
