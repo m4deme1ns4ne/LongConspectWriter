@@ -214,7 +214,7 @@ class BasePipeline(Trackable, Base):
         output_dir = Path(self.pipeline_config.output_dir)
 
         self.actual_session_dir = (
-            output_dir / "runs" / datetime.now().strftime("%H.%M.%S___%Y.%m.%d")
+            output_dir / "runs" / datetime.now().strftime("%Y.%m.%d___%H.%M.%S")
         )
         self.actual_session_dir.mkdir(exist_ok=False, parents=True)
 

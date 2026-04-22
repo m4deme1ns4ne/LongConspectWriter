@@ -120,9 +120,6 @@ def check_path_is(func):
     return wrapper
 
 
-
-
-
 @dataclass
 class ColoursForTqdm:
     first_level: str = "#f5eee6"

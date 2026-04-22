@@ -1,44 +1,85 @@
-from sentence_transformers import SentenceTransformer
-from sklearn.cluster import AgglomerativeClustering
-from src.core.utils import TextsSplitter
-from loguru import logger
+import json
+import torch
 import numpy as np
 from pathlib import Path
-import json
-from sentence_transformers import util
-import torch
+from loguru import logger
+from sentence_transformers import SentenceTransformer, util
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.decomposition import PCA
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from src.core.utils import TextsSplitter
 from src.core.base import BaseClusterizer
 
 
 class Visualize_clustering_metrics:
-    # TODO: [ТЕХДОЛГ - Observability] Реализовать визуализацию распределения кластеров
-    # Использовать: plotly (для интерактива) или matplotlib/seaborn (для статики) + umap-learn для проекций
-    def _visualize_clustering_metrics(
-        self,
-        sentences: list,
-        local_labels: list,
-        global_clusters: dict,
-        local_embeddings: np.ndarray,
+    @staticmethod
+    def plot_local_clusters(labels: np.ndarray, session_dir: Path):
+        """Отрисовка хронологической гистограммы локальных кластеров."""
+        cluster_sizes = {}
+        for label in labels:
+            label = int(label)
+            cluster_sizes[label] = cluster_sizes.get(label, 0) + 1
+
+        plt.figure(figsize=(12, 6))
+        plt.bar(
+            range(len(cluster_sizes)),
+            list(cluster_sizes.values()),
+            color="skyblue",
+            edgecolor="black",
+        )
+        plt.title("Распределение предложений по локальным кластерам (Хронология)")
+        plt.xlabel("Индекс локального кластера (время лекции ->)")
+        plt.ylabel("Количество предложений в кластере")
+
+        out_path = session_dir / "02_local_clusters" / "local_distribution.png"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.tight_layout()
+        plt.savefig(out_path, dpi=150)
+        plt.close()
+        logger.success(f"График локальной кластеризации сохранен: {out_path}")
+
+    @staticmethod
+    def plot_global_clusters(
+        embeddings: np.ndarray,
+        assignments: list,
+        chapter_titles: list,
+        session_dir: Path,
     ):
-        """
-        Отрисовка метрик кластеризации для калибровки порогов (distance_threshold) и отлова галлюцинаций матчинга.
+        """Отрисовка 2D PCA проекции привязки абзацев к главам."""
+        if len(embeddings) < 2:
+            logger.warning("Слишком мало данных для PCA проекции.")
+            return
 
-        # 1. Локальная кластеризация (Хронологическая гистограмма)
-        # Данные: local_labels -> подсчет частоты (сколько sentences в каждом label).
-        # График: Bar Chart.
-        # Ось X: Индекс кластера (строго по порядку времени 0, 1, 2...).
-        # Ось Y: Количество предложений (размер кластера).
-        # Ожидание: Отсутствие "пилы" (чередования кластеров по 1 предложению) и гигантских монолитов.
+        pca = PCA(n_components=2)
+        reduced_embeddings = pca.fit_transform(embeddings)
 
-        # 2. Глобальная кластеризация (Семантический Scatter Plot)
-        # Данные: local_embeddings (векторы e5-small) -> сжать до 2D через PCA или UMAP.
-        # График: 2D Scatter Plot.
-        # Точки: Локальные кластеры.
-        # Цвет (hue): Название главы из global_clusters, к которой привязан кластер.
-        # Ожидание: Четкие визуальные облака точек. Если точка далеко от своего облака — это мусор,
-        # который алгоритм притянул к главе "за уши". Нужно вводить threshold для косинусного расстояния.
-        """
-        pass
+        assigned_labels = [chapter_titles[idx] for idx in assignments]
+
+        plt.figure(figsize=(14, 8))
+        sns.scatterplot(
+            x=reduced_embeddings[:, 0],
+            y=reduced_embeddings[:, 1],
+            hue=assigned_labels,
+            palette="tab10",
+            s=100,
+            alpha=0.8,
+        )
+
+        plt.title("Семантическое распределение локальных кластеров по главам (PCA)")
+        plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", title="Главы")
+        plt.tight_layout()
+
+        out_path = session_dir / "05_global_clusters" / "global_distribution.png"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(out_path, dpi=150)
+        plt.close()
+        logger.success(f"График глобальной кластеризации сохранен: {out_path}")
 
 
 class SemanticLocalClusterizer(BaseClusterizer):
@@ -66,6 +107,8 @@ class SemanticLocalClusterizer(BaseClusterizer):
             connectivity=connectivity,
         )
         labels = local_clusterer.fit_predict(embeddings)
+
+        Visualize_clustering_metrics.plot_local_clusters(labels, self.session_dir)
 
         clusters = self._format_cluster_output(sentences, labels)
 
@@ -118,7 +161,7 @@ class SemanticGlobalClusterizer(BaseClusterizer):
 
         with open(local_clusters_path, "r", encoding="utf-8") as file:
             local_clusters_dict = json.load(file)
-        
+
         local_clusters = list(local_clusters_dict.values())
 
         chapters = global_plan["chapters"]
@@ -141,6 +184,13 @@ class SemanticGlobalClusterizer(BaseClusterizer):
         max_scores_tensor, assignments_tensor = (
             max_scores_tensor.tolist(),
             assignments_tensor.tolist(),
+        )
+
+        Visualize_clustering_metrics.plot_global_clusters(
+            local_clusters_embeddings,
+            assignments_tensor,
+            chapter_titles,
+            self.session_dir,
         )
 
         for chunk_idx, chapter_idx in enumerate(assignments_tensor):

@@ -279,12 +279,12 @@ class LongConspectWriterPipeline(BasePipeline):
                 final_conspect += f"{text_body}\n\n"
 
             out_filepath = self._safe_result_out_line(
-                            output_dict=final_conspect,
-                            stage="07_conspect_md",
-                            file_name="conspect.md",
-                            session_dir=self.actual_session_dir,
-                            extension="md",
-                        )
+                output_dict=final_conspect,
+                stage="07_conspect_md",
+                file_name="conspect.md",
+                session_dir=self.actual_session_dir,
+                extension="md",
+            )
 
             return out_filepath
 
