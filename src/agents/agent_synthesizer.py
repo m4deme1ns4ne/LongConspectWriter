@@ -137,6 +137,7 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
                                     chunk=chunk,
                                     cluster_topik=topik,
                                     previous_context=combined_context,
+                                    tokenizer=self.model.tokenize
                                 ),
                                 stream=True,
                                 token_pbar=chunk_token_pbar,

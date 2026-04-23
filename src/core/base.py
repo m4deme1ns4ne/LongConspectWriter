@@ -8,7 +8,7 @@ from src.configs.configs import (
     LLMAppConfig,
     LocalClusterizerInitConfig,
     LocalClusterizerGenConfig,
-    GlobalClusterizerInitConfig
+    GlobalClusterizerInitConfig,
 )
 from dataclasses import asdict
 from tenacity import retry, stop_after_attempt, wait_fixed
@@ -136,8 +136,20 @@ class BaseLlamaCppAgent(BaseLLMAgent):
             f"Параметры использования агента {self.__class__.__name__}: {self._app_config}"
         )
 
-    def _build_prompt(self, **kwargs) -> list[dict[str]]:
+    def _build_prompt(self, tokenizer = None, **kwargs) -> list[dict[str]]:
         user_prompt = self.user_template.format(**kwargs)
+        if tokenizer is not None:
+            len_tokenizer_system_prompt = len(tokenizer(self.system_prompt.encode("utf-8")))
+            len_tokenizer_user_prompt = len(tokenizer(user_prompt.encode("utf-8")))
+            logger.debug(
+                f"Текущая длинна системного промпта: {len_tokenizer_system_prompt}"
+            )
+            logger.debug(
+                f"Текущая длинна запроса: {len_tokenizer_user_prompt}"
+            )
+            logger.debug(
+                f"Текущая длинна общая длинна контекста: {len_tokenizer_system_prompt + len_tokenizer_user_prompt}"
+            )
         return [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": user_prompt},
@@ -154,16 +166,27 @@ class BaseLlamaCppAgent(BaseLLMAgent):
         prompt: list[dict[str, str]],
         stream: bool = False,
         token_pbar: Any = None,
-        logit_bias={},
+        logit_bias: dict = None,
+        response_format: dict = None,
     ) -> str:
+
+        if logit_bias is None:
+            logit_bias = {}
+
+        kwargs = {
+            "messages": prompt,
+            "stream": stream,
+            "logit_bias": logit_bias,
+            **asdict(self._gen_config),
+        }
+
+        if response_format is not None:
+            kwargs["response_format"] = response_format
+
         if stream:
             response_text = ""
-            generator = self.model.create_chat_completion(
-                messages=prompt,
-                stream=True,
-                logit_bias=logit_bias,
-                **asdict(self._gen_config),
-            )
+            generator = self.model.create_chat_completion(**kwargs)
+
             for chunk in generator:
                 delta = chunk["choices"][0]["delta"]
                 if "content" in delta:
@@ -173,9 +196,7 @@ class BaseLlamaCppAgent(BaseLLMAgent):
                         token_pbar.update(1)
             return response_text
         else:
-            response = self.model.create_chat_completion(
-                messages=prompt, stream=False, **asdict(self._gen_config)
-            )
+            response = self.model.create_chat_completion(**kwargs)
             return response["choices"][0]["message"]["content"]
 
 
@@ -216,6 +237,7 @@ class BaseSTTAgent(BaseAgent):
             self.initial_prompt = self.prompt[self._app_config.agent_name][
                 self._app_config.the_subject_lecture
             ]
+
 
 class BaseLocalClusterizer(Trackable, Base):
     def __init__(

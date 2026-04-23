@@ -75,6 +75,7 @@ class LLMAppConfig:
     max_tokens_for_summary_ratio: float | None = None
     max_history_tokens: float | None = None
     max_tokens_for_compressed_summary_ratio: float | None = None
+    scheme_output_path: dict = None
 
 
 @dataclass
