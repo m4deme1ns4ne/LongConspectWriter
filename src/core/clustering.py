@@ -5,88 +5,29 @@ from pathlib import Path
 from loguru import logger
 from sentence_transformers import SentenceTransformer, util
 from sklearn.cluster import AgglomerativeClustering
-from sklearn.decomposition import PCA
 
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 from src.core.utils import TextsSplitter
 from src.core.base import BaseClusterizer
-
-
-class Visualize_clustering_metrics:
-    @staticmethod
-    def plot_local_clusters(labels: np.ndarray, session_dir: Path):
-        """Отрисовка хронологической гистограммы локальных кластеров."""
-        cluster_sizes = {}
-        for label in labels:
-            label = int(label)
-            cluster_sizes[label] = cluster_sizes.get(label, 0) + 1
-
-        plt.figure(figsize=(12, 6))
-        plt.bar(
-            range(len(cluster_sizes)),
-            list(cluster_sizes.values()),
-            color="skyblue",
-            edgecolor="black",
-        )
-        plt.title("Распределение предложений по локальным кластерам (Хронология)")
-        plt.xlabel("Индекс локального кластера (время лекции ->)")
-        plt.ylabel("Количество предложений в кластере")
-
-        out_path = session_dir / "02_local_clusters" / "local_distribution.png"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        plt.tight_layout()
-        plt.savefig(out_path, dpi=150)
-        plt.close()
-        logger.success(f"График локальной кластеризации сохранен: {out_path}")
-
-    @staticmethod
-    def plot_global_clusters(
-        embeddings: np.ndarray,
-        assignments: list,
-        chapter_titles: list,
-        session_dir: Path,
-    ):
-        """Отрисовка 2D PCA проекции привязки абзацев к главам."""
-        if len(embeddings) < 2:
-            logger.warning("Слишком мало данных для PCA проекции.")
-            return
-
-        pca = PCA(n_components=2)
-        reduced_embeddings = pca.fit_transform(embeddings)
-
-        assigned_labels = [chapter_titles[idx] for idx in assignments]
-
-        plt.figure(figsize=(14, 8))
-        sns.scatterplot(
-            x=reduced_embeddings[:, 0],
-            y=reduced_embeddings[:, 1],
-            hue=assigned_labels,
-            palette="tab10",
-            s=100,
-            alpha=0.8,
-        )
-
-        plt.title("Семантическое распределение локальных кластеров по главам (PCA)")
-        plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", title="Главы")
-        plt.tight_layout()
-
-        out_path = session_dir / "05_global_clusters" / "global_distribution.png"
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(out_path, dpi=150)
-        plt.close()
-        logger.success(f"График глобальной кластеризации сохранен: {out_path}")
+from src.core.vizualization import LocalClusterVisualizer, GlobalClusterVisualizer
 
 
 class SemanticLocalClusterizer(BaseClusterizer):
-    def __init__(self, model_name, session_dir: Path):
+    def __init__(
+        self,
+        model_name,
+        session_dir: Path,
+        threshold: float = 0.25,
+        linkage: str = "complete",
+    ):
         self.model_name = model_name
         self.model = SentenceTransformer(model_name)
         self.session_dir = session_dir
+        self.threshold = threshold
+        self.linkage = linkage
 
     def run(self, path):
         with open(path, "r", encoding="utf-8") as file:
@@ -101,14 +42,20 @@ class SemanticLocalClusterizer(BaseClusterizer):
         connectivity = np.eye(n_samples, k=1) + np.eye(n_samples, k=-1)
         local_clusterer = AgglomerativeClustering(
             n_clusters=None,
-            distance_threshold=0.5,
+            distance_threshold=self.threshold,
             metric="cosine",
-            linkage="average",
+            linkage=self.linkage,
             connectivity=connectivity,
         )
         labels = local_clusterer.fit_predict(embeddings)
-
-        Visualize_clustering_metrics.plot_local_clusters(labels, self.session_dir)
+        metadata = {
+            "Model": self.model_name,
+            "Threshold": self.threshold,
+            "Linkage": self.linkage,
+            "Sentences": len(sentences),
+        }
+        visualizer = LocalClusterVisualizer(self.session_dir)
+        visualizer.plot(labels, metadata)
 
         clusters = self._format_cluster_output(sentences, labels)
 
@@ -179,21 +126,46 @@ class SemanticGlobalClusterizer(BaseClusterizer):
 
         global_clusters = {key: [] for key in chapter_titles}
         scores = util.cos_sim(local_clusters_embeddings, global_plan_embeddings)
+        _, assignments_tensor = torch.max(scores, dim=1)
+        assignments = assignments_tensor.tolist()
 
-        max_scores_tensor, assignments_tensor = torch.max(scores, dim=1)
-        max_scores_tensor, assignments_tensor = (
-            max_scores_tensor.tolist(),
-            assignments_tensor.tolist(),
+        # НОВЫЙ БЛОК: Монотонное сглаживание хронологии
+        smoothed_assignments = []
+        current_chapter = 0  # Начинаем с первой главы
+
+        for i, chapter in enumerate(assignments):
+            # Если модель предлагает прыгнуть назад во времени — игнорируем
+            if chapter < current_chapter:
+                smoothed_assignments.append(current_chapter)
+
+            # Если модель предлагает прыгнуть вперед
+            elif chapter > current_chapter:
+                # Проверяем, не случайный ли это выброс (смотрим на след. 2 куска)
+                future_window = assignments[i : i + 3]
+
+                # Если в будущем глава стабильно новая, переходим в нее
+                # Иначе считаем это галлюцинацией e5 и остаемся в текущей
+                if future_window.count(chapter) >= 2 or i == len(assignments) - 1:
+                    current_chapter = chapter
+
+                smoothed_assignments.append(current_chapter)
+            else:
+                smoothed_assignments.append(current_chapter)
+
+        # Перезаписываем assignments сглаженной версией
+        assignments = smoothed_assignments
+
+        metadata = {
+            "Model": self.model_name,
+            "Metric": "cosine",
+            "Chapters": len(chapter_titles),
+        }
+        visualizer = GlobalClusterVisualizer(self.session_dir)
+        visualizer.plot(
+            local_clusters_embeddings, assignments, chapter_titles, metadata
         )
 
-        Visualize_clustering_metrics.plot_global_clusters(
-            local_clusters_embeddings,
-            assignments_tensor,
-            chapter_titles,
-            self.session_dir,
-        )
-
-        for chunk_idx, chapter_idx in enumerate(assignments_tensor):
+        for chunk_idx, chapter_idx in enumerate(assignments):
             global_clusters[chapter_titles[chapter_idx]].append(
                 local_clusters[chunk_idx]
             )
