@@ -13,27 +13,8 @@ from src.configs.configs import AgentConfigBundle
 class TextsSplitter:
     @staticmethod
     def split_text_to_sentences(text: str) -> list[str]:
-        # cleaned_text = TextsSplitter._sanitize_drafter_text(text)
         sentences = list(sentenize(text))
         return [sentence.text for sentence in sentences]
-
-    # @staticmethod
-    # def _sanitize_drafter_text(text: str) -> str:
-    #     """
-    #     Нормализатор "грязного" текста от LLM.
-    #     Восстанавливает пунктуацию для корректной работы razdel.
-    #     """
-    #     # 1. Защита от "потерянных" точек перед переносом строки.
-    #     # Если перед \n нет знака препинания (., !, ?, :, ;), ставим точку принудительно.
-    #     text = re.sub(r"(?<![\.\!\?\:\;])(\s*\n)", r".\1", text)
-
-    #     # 2. Гарантия точки после семантических тегов.
-    #     text = re.sub(r"(\[[А-ЯЁA-Z]+\])(?!\s*[\.\!\?\,\:])", r"\1.", text)
-
-    #     # 3. Базовая очистка мусорных пробелов, чтобы не плодить пустые токены
-    #     text = re.sub(r"[ \t]{2,}", " ", text)
-
-    #     return text
 
     @staticmethod
     def split_text_to_tokens(
@@ -116,8 +97,12 @@ def load_agent_bundle(
     with open(yaml_path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
 
-    init_cfg = cls_init_config(**config.get("init_config", {})) if cls_init_config else None
+    init_cfg = (
+        cls_init_config(**config.get("init_config", {})) if cls_init_config else None
+    )
     gen_cfg = cls_gen_config(**config.get("gen_config", {})) if cls_gen_config else None
     app_cfg = cls_app_config(**config.get("app_config", {})) if cls_app_config else None
 
-    return AgentConfigBundle(init_config=init_cfg, gen_config=gen_cfg, app_config=app_cfg)
+    return AgentConfigBundle(
+        init_config=init_cfg, gen_config=gen_cfg, app_config=app_cfg
+    )

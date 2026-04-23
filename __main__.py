@@ -120,11 +120,15 @@ def main() -> None:
 
         local_cluster_bundle = load_agent_bundle(
             "src/configs/config-clusterizer/config_local_clusterizer.yaml",
-            LocalClusterizerInitConfig, LocalClusterizerGenConfig, None
+            LocalClusterizerInitConfig,
+            LocalClusterizerGenConfig,
+            None,
         )
         global_cluster_bundle = load_agent_bundle(
             "src/configs/config-clusterizer/config_global_clusterizer.yaml",
-            GlobalClusterizerInitConfig, None, None
+            GlobalClusterizerInitConfig,
+            None,
+            None,
         )
 
         session_config = PipelineSessionConfig(
@@ -135,7 +139,7 @@ def main() -> None:
             local_planner=lp_bundle,
             global_planner=gp_bundle,
             local_clusterizer=local_cluster_bundle,
-            global_clusterizer=global_cluster_bundle
+            global_clusterizer=global_cluster_bundle,
         )
 
         pipeline = LongConspectWriterPipeline(session_config)
