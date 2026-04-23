@@ -17,36 +17,11 @@ from src.configs.configs import (
     LLMGenConfig,
     LLMAppConfig,
     PipelineConfig,
+    PipelineSessionConfig,
 )
+from src.core.utils import load_agent_bundle
 
-# # Оставляем только нужные системные фиксы, мусор от transformers удален
-# warnings.filterwarnings("ignore", category=UserWarning)
-# os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
-
-def load_configs(
-    yaml_path,
-    cls_init_config=None,
-    cls_gen_config=None,
-    cls_app_config=None,
-):
-    with open(yaml_path, "r", encoding="utf-8") as file:
-        config = yaml.safe_load(file)
-
-    if cls_init_config is None:
-        init_config = None
-    else:
-        init_config = cls_init_config(**config.get("init_config", {}))
-    if cls_gen_config is None:
-        gen_config = None
-    else:
-        gen_config = cls_gen_config(**config.get("gen_config", {}))
-    if cls_app_config is None:
-        app_config = None
-    else:
-        app_config = cls_app_config(**config.get("app_config", {}))
-
-    return init_config, gen_config, app_config
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
 def main() -> None:
@@ -106,68 +81,53 @@ def main() -> None:
     args = parser.parse_args()
 
     args.output_file_path = "src/configs/config_pipeline.yaml"
-    _, _, pipeline_config = load_configs(
-        args.output_file_path, cls_app_config=PipelineConfig
-    )
+
+    with open(args.output_file_path, "r", encoding="utf-8") as file:
+        raw_pipeline_cfg = yaml.safe_load(file)
+    pipeline_config = PipelineConfig(**raw_pipeline_cfg.get("app_config", {}))
 
     if args.config_path is None:
-        # 1. Загрузка STT
-        stt_init, stt_gen, stt_app = load_configs(
+        stt_bundle = load_agent_bundle(
             "src/configs/config-agents/stt/config_stt.yaml",
             STTInitConfig,
             STTGenConfig,
             AppSTTConfig,
         )
-
-        # 2. Загрузка Drafter
-        drafter_init, drafter_gen, drafter_app = load_configs(
+        drafter_bundle = load_agent_bundle(
             "src/configs/config-agents/drafter/config_drafter.yaml",
             LLMInitConfig,
             LLMGenConfig,
             LLMAppConfig,
         )
-
-        # 3. Загрузка Synthesizer
-        synth_init, synth_gen, synth_app = load_configs(
+        synth_bundle = load_agent_bundle(
             "src/configs/config-agents/synthesizer/config_synthesizer.yaml",
             LLMInitConfig,
             LLMGenConfig,
             LLMAppConfig,
         )
-
-        # 4. Загрузка Local Planner
-        lp_init, lp_gen, lp_app = load_configs(
+        lp_bundle = load_agent_bundle(
             "src/configs/config-agents/local_planner/config_local_planner.yaml",
             LLMInitConfig,
             LLMGenConfig,
             LLMAppConfig,
         )
-
-        # 5. Загрузка Global Planner
-        gp_init, gp_gen, gp_app = load_configs(
+        gp_bundle = load_agent_bundle(
             "src/configs/config-agents/global_planner/config_global_planner.yaml",
             LLMInitConfig,
             LLMGenConfig,
             LLMAppConfig,
         )
-        pipeline = LongConspectWriterPipeline(
-            pipeline_config,
-            stt_init,
-            stt_gen,
-            stt_app,
-            drafter_init,
-            drafter_gen,
-            drafter_app,
-            synth_init,
-            synth_gen,
-            synth_app,
-            lp_init,
-            lp_gen,
-            lp_app,
-            gp_init,
-            gp_gen,
-            gp_app,
+
+        session_config = PipelineSessionConfig(
+            pipeline=pipeline_config,
+            stt=stt_bundle,
+            drafter=drafter_bundle,
+            synthesizer=synth_bundle,
+            local_planner=lp_bundle,
+            global_planner=gp_bundle,
         )
+
+        pipeline = LongConspectWriterPipeline(session_config)
     else:
         logger.warning("Архитектура с единым конфигом пока не реализована.")
         return
@@ -210,9 +170,6 @@ def main() -> None:
 
         elif args.action == "stt":
             output_path = pipeline._call_stt(path_to_file)
-
-        elif args.action == "drafter":
-            output_path = pipeline._call_drafter(path_to_file)
 
         elif args.action == "synthesizer":
             output_path = pipeline._call_synthesizer(path_to_file)

@@ -61,7 +61,7 @@ class FasterWhisper(BaseSTTAgent):
             )
             logger.info(f"VAD-фильтр вырезал {saved_mins:.2f} мин. тишины.")
 
-        full_text = ""
+        full_text_segments = []
 
         with tqdm(
             total=round(info.duration, 2),
@@ -73,12 +73,12 @@ class FasterWhisper(BaseSTTAgent):
         ) as pbar:
             for segment in segments:
                 text = segment.text.strip()
-                full_text += f"{text}\n"
+                full_text_segments.append(text)
 
                 progress = segment.end - pbar.n
                 pbar.update(progress)
 
-        full_text_dict = {"answer_agent": full_text}
+        full_text_dict = {"answer_agent": "\n".join(full_text_segments)}
 
         out_filepath = self._safe_result_out_line(
             output_dict=full_text_dict,

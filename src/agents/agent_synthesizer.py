@@ -1,15 +1,11 @@
-import os
 from tqdm import tqdm
-import time
 import sys
 from pathlib import Path
 import json
 
 from loguru import logger
 from src.core.base import BaseLlamaCppAgent
-from src.core.utils import TextsSplitter, bad_words_id_generate, ColoursForTqdm
-
-from src.configs.bad_words import BAD_WORDS_SYNTHESIZER
+from src.core.utils import TextsSplitter, ColoursForTqdm
 
 
 class AgentSynthesizerLlama(BaseLlamaCppAgent):
@@ -23,10 +19,14 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
 
         conspect = {topik: [] for topik, _ in global_clusters.items()}
 
-        max_tokens_for_summary = int(self._gen_config.max_tokens * 0.2)
+        max_tokens_for_summary = int(
+            self._app_config.max_tokens_for_summary_ratio * self._gen_config.max_tokens
+        )
         rolling_summary = []
         last_tail = "Это начало лекции."
-        max_history_tokens = 1024
+        max_history_tokens = int(
+            self._app_config.max_history_tokens * self._gen_config.max_tokens
+        )
 
         # УРОВЕНЬ 1: Цикл по глобальным темам (Кластерам)
         with tqdm(
@@ -43,8 +43,13 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
                 split_clusters: list[str] = TextsSplitter.split_text_to_tokens(
                     text=full_text,
                     tokenizer=self.model.tokenize,
-                    chunk_size=int(self._gen_config.max_tokens * 0.75),
-                    chunk_overlap=int(self._gen_config.max_tokens * 0.25),
+                    chunk_size=int(
+                        self._app_config.chunk_size_ratio * self._gen_config.max_tokens
+                    ),
+                    chunk_overlap=int(
+                        self._app_config.chunk_overlap_ratio
+                        * self._gen_config.max_tokens
+                    ),
                 )
 
                 # УРОВЕНЬ 2: Цикл по кускам текста внутри темы
@@ -83,7 +88,8 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
                             ]
                             original_max_tokens = self._gen_config.max_tokens
                             self._gen_config.max_tokens = int(
-                                self._gen_config.max_tokens * 0.3
+                                self._gen_config.max_tokens
+                                * self._app_config.max_tokens_for_compressed_summary_ratio
                             )
 
                             with tqdm(

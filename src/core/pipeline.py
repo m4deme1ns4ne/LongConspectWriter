@@ -1,58 +1,17 @@
-from src.core.stt import FasterWhisper
-from src.agents.agent_planner import AgentLocalPlanner, AgentGlobalPlanner
-from src.core.clustering import SemanticLocalClusterizer, SemanticGlobalClusterizer
 from os import PathLike
 from src.core.base import BasePipeline
 from src.core.utils import check_path_is
 from loguru import logger
 import multiprocessing
-from src.agents.agent_synthesizer import AgentSynthesizerLlama
 import json
+from src.configs.configs import PipelineSessionConfig
 
 
-# Раздутый init потом поменять просто на датакласс
 class LongConspectWriterPipeline(BasePipeline):
-    def __init__(
-        self,
-        pipeline_config,
-        stt_init_config,
-        stt_gen_config,
-        stt_app_config,
-        drafter_init_config,
-        drafter_gen_config,
-        drafter_app_config,
-        synthesizer_init_config,
-        synthesizer_gen_config,
-        synthesizer_app_config,
-        local_planner_init_config,
-        local_planner_gen_config,
-        local_planner_app_config,
-        global_planner_init_config,
-        global_planner_gen_config,
-        global_planner_app_config,
-    ):
-        self.pipeline_config = pipeline_config
+    def __init__(self, session_config: PipelineSessionConfig):
+        self.config = session_config
+        self.pipeline_config = self.config.pipeline
         self.__post_init__()
-
-        self.stt_init_config = stt_init_config
-        self.stt_gen_config = stt_gen_config
-        self.stt_app_config = stt_app_config
-
-        self.drafter_init_config = drafter_init_config
-        self.drafter_gen_config = drafter_gen_config
-        self.drafter_app_config = drafter_app_config
-
-        self.synthesizer_init_config = synthesizer_init_config
-        self.synthesizer_gen_config = synthesizer_gen_config
-        self.synthesizer_app_config = synthesizer_app_config
-
-        self.local_planner_init_config = local_planner_init_config
-        self.local_planner_gen_config = local_planner_gen_config
-        self.local_planner_app_config = local_planner_app_config
-
-        self.global_planner_init_config = global_planner_init_config
-        self.global_planner_gen_config = global_planner_gen_config
-        self.global_planner_app_config = global_planner_app_config
 
     # @check_path_is
     # def _call_stt(self, path: Path) -> Path | None:
@@ -67,10 +26,12 @@ class LongConspectWriterPipeline(BasePipeline):
         self, path: str | PathLike, result_queue: multiprocessing.Queue
     ) -> None:
         try:
+            from src.core.stt import FasterWhisper
+
             faster_whisper = FasterWhisper(
-                init_config=self.stt_init_config,
-                gen_config=self.stt_gen_config,
-                app_config=self.stt_app_config,
+                init_config=self.config.stt.init_config,
+                gen_config=self.config.stt.gen_config,
+                app_config=self.config.stt.app_config,
                 session_dir=self.actual_session_dir,
             )
             transcript_path = faster_whisper.run(audio_file_path=path)
@@ -104,42 +65,6 @@ class LongConspectWriterPipeline(BasePipeline):
                 "Процесс STT завершился, но не вернул результат. Возможно, произошло жесткое падение CTranslate2."
             )
 
-    # @check_path_is
-    # def _call_drafter(self, path: str | PathLike) -> str | PathLike | None:
-    #     """
-    #     Запускает AgentDrafter для извлечения фактов, определений и теорем.
-    #     Вход (path): Путь к тематическому кластеру (результат глобальной кластеризации).
-    #     Выход: Путь к файлу с мини-конспектами и плейсхолдерами {{formula}}, {{figure}}.
-    #             None если Drafter не нашёл академического контента.
-    #     """
-    #     backend = getattr(self.drafter_init_config, "backend", "llamacpp")
-
-    #     if backend == "llamacpp":
-    #         logger.info("Запуск Драфтера через Llama.cpp (Оптимальный режим)")
-    #         from src.agents.agent_drafter import AgentDrafterLlama
-
-    #         with AgentDrafterLlama(
-    #             init_config=self.drafter_init_config,
-    #             gen_config=self.drafter_gen_config,
-    #             app_config=self.drafter_app_config,
-    #         ) as drafter:
-    #             new_path = drafter.run(path)
-
-    #     elif backend == "transformers":
-    #         logger.info("Запуск Драфтера через Transformers (Режим совместимости)")
-    #         from src.agents.agent_drafter import AgentDrafterTransformers
-
-    #         with AgentDrafterTransformers(
-    #             init_config=self.drafter_init_config,
-    #             gen_config=self.drafter_gen_config,
-    #             app_config=self.drafter_app_config,
-    #         ) as drafter:
-    #             new_path = drafter.run(path)
-    #     else:
-    #         raise ValueError(f"Неизвестный бэкенд для Синтезатора: {backend}")
-
-    #     return new_path
-
     @check_path_is
     def _call_local_clustering(self, path: str | PathLike) -> str | PathLike:
         """
@@ -147,10 +72,11 @@ class LongConspectWriterPipeline(BasePipeline):
         Вход (path): Путь к сырой транскрипции (результат STT).
         Выход: Путь к файлу, где текст разделен сепараторами (локальные кластеры).
         """
-        # Пока захардкодил. Потом добавить в конфиг
-        model_name = "cointegrated/rubert-tiny2"
+        from src.core.clustering import SemanticLocalClusterizer
+
         model_local_clustering = SemanticLocalClusterizer(
-            model_name, session_dir=self.actual_session_dir
+            self.pipeline_config.local_clustering_model,
+            session_dir=self.actual_session_dir,
         )
         new_path = model_local_clustering.run(path)
         return new_path
@@ -162,16 +88,17 @@ class LongConspectWriterPipeline(BasePipeline):
         Вход (path): Путь к локальным кластерам.
         Выход: Путь к файлу (.md) с плоским списком всех микро-тем лекции.
         """
+        from src.agents.agent_planner import AgentLocalPlanner
+
         with AgentLocalPlanner(
-            init_config=self.local_planner_init_config,
-            gen_config=self.local_planner_gen_config,
-            app_config=self.local_planner_app_config,
+            init_config=self.config.local_planner.init_config,
+            gen_config=self.config.local_planner.gen_config,
+            app_config=self.config.local_planner.app_config,
             session_dir=self.actual_session_dir,
         ) as planner:
             new_path = planner.run(path)
             return new_path
 
-    # Тут надо будеь пошаманить, чтобы он выдавал идельное кол во глав, может как то математически расчитывал...
     @check_path_is
     def _call_global_planner(
         self,
@@ -182,10 +109,12 @@ class LongConspectWriterPipeline(BasePipeline):
         Вход (path): Путь к списку микро-тем (результат LocalPlanner).
         Выход: Путь к JSON-файлу со структурой глав (chapter_title, description).
         """
+        from src.agents.agent_planner import AgentGlobalPlanner
+
         with AgentGlobalPlanner(
-            init_config=self.global_planner_init_config,
-            gen_config=self.global_planner_gen_config,
-            app_config=self.global_planner_app_config,
+            init_config=self.config.global_planner.init_config,
+            gen_config=self.config.global_planner.gen_config,
+            app_config=self.config.global_planner.app_config,
             session_dir=self.actual_session_dir,
         ) as planner:
             new_path = planner.run(path)
@@ -219,10 +148,11 @@ class LongConspectWriterPipeline(BasePipeline):
           - local_clusters_path: Путь к оригинальным локальным кластерам (абзацам).
         Выход: Путь к глобальным кластерам (Json)
         """
-        # Пока захардкодил. Потом добавить в конфиг
-        model_name = "intfloat/multilingual-e5-small"
+        from src.core.clustering import SemanticGlobalClusterizer
+
         model_global_clustering = SemanticGlobalClusterizer(
-            model_name, session_dir=self.actual_session_dir
+            self.pipeline_config.global_clustering_model,
+            session_dir=self.actual_session_dir,
         )
         new_path = model_global_clustering.run(global_plan_path, local_clusters_path)
 
@@ -250,14 +180,15 @@ class LongConspectWriterPipeline(BasePipeline):
         path: str | PathLike,
     ) -> str | PathLike:
         """
-        Запускает AgentSynthesizer (LongWriter) для синтеза финального конспекта.
+        Запускает AgentSynthesizer для синтеза финального конспекта.
         """
 
-        logger.info("Запуск Синтезатора через Llama.cpp (Оптимальный режим)")
+        from src.agents.agent_synthesizer import AgentSynthesizerLlama
+
         with AgentSynthesizerLlama(
-            init_config=self.synthesizer_init_config,
-            gen_config=self.synthesizer_gen_config,
-            app_config=self.synthesizer_app_config,
+            init_config=self.config.synthesizer.init_config,
+            gen_config=self.config.synthesizer.gen_config,
+            app_config=self.config.synthesizer.app_config,
             session_dir=self.actual_session_dir,
         ) as synthesizer:
             new_path = synthesizer.run(path)
@@ -268,25 +199,31 @@ class LongConspectWriterPipeline(BasePipeline):
         with open(path, "r", encoding="utf-8") as file:
             conspect = json.load(file)
 
-            final_conspect = """**Этот конспект сгенерирован с помощью AI.**\n**Система может допускать ошибки в формулах, вычислениях и специфической терминологии.**\n**Пожалуйста, относитесь с понимаем и проверяйте конспект!**\n\n"""
+        md_lines = [
+            "**Этот конспект сгенерирован с помощью AI.**",
+            "**Система может допускать ошибки в формулах, вычислениях и специфической терминологии.**",
+            "**Пожалуйста, относитесь с понимаем и проверяйте конспект!**\n",
+        ]
 
-            for topik, body in conspect.items():
-                final_conspect += f"# {topik}\n\n"
-                if isinstance(body, list):
-                    text_body = "\n\n".join(str(item) for item in body)
-                else:
-                    text_body = str(body)
-                final_conspect += f"{text_body}\n\n"
+        for topik, body in conspect.items():
+            md_lines.append(f"# {topik}\n")
+            if isinstance(body, list):
+                text_body = "\n\n".join(str(item) for item in body)
+            else:
+                text_body = str(body)
+            md_lines.append(f"{text_body}\n")
 
-            out_filepath = self._safe_result_out_line(
-                output_dict=final_conspect,
-                stage="07_conspect_md",
-                file_name="conspect.md",
-                session_dir=self.actual_session_dir,
-                extension="md",
-            )
+        final_conspect = "\n".join(md_lines)
 
-            return out_filepath
+        out_filepath = self._safe_result_out_line(
+            output_dict=final_conspect,
+            stage="07_conspect_md",
+            file_name="conspect.md",
+            session_dir=self.actual_session_dir,
+            extension="md",
+        )
+
+        return out_filepath
 
     def run(self, audio_file_path: str | PathLike) -> str | None:
         """
@@ -297,8 +234,6 @@ class LongConspectWriterPipeline(BasePipeline):
         Выход: Путь к итоговому конспекту. None если пайплайн не вернул результат.
         """
         transcript_path = self._call_stt(audio_file_path)
-
-        # compressed_transcript_path = self._call_drafter(transcript_path)
 
         clustering_path = self._call_clustering(transcript_path)
 

@@ -16,6 +16,8 @@ from faster_whisper import WhisperModel
 import json
 from pathlib import Path
 from datetime import datetime
+import matplotlib.pyplot as plt
+import time
 
 
 class Trackable:
@@ -144,12 +146,19 @@ class BaseLlamaCppAgent(BaseLLMAgent):
         reraise=True,
     )
     def _generate(
-        self, prompt: list[dict[str, str]], stream: bool = False, token_pbar: Any = None
+        self,
+        prompt: list[dict[str, str]],
+        stream: bool = False,
+        token_pbar: Any = None,
+        logit_bias={},
     ) -> str:
         if stream:
             response_text = ""
             generator = self.model.create_chat_completion(
-                messages=prompt, stream=True, **asdict(self._gen_config)
+                messages=prompt,
+                stream=True,
+                logit_bias=logit_bias,
+                **asdict(self._gen_config),
             )
             for chunk in generator:
                 delta = chunk["choices"][0]["delta"]
@@ -221,3 +230,32 @@ class BasePipeline(Trackable, Base):
         logger.success(
             f"Папка актуальной сессии создана по пути: {self.actual_session_dir}"
         )
+
+
+class BaseClusterVisualizer:
+    def __init__(self, session_dir: Path):
+        self.session_dir = session_dir
+
+    def _add_watermark(self, metadata: dict) -> None:
+        """Приватный метод для добавления текста метаданных на холст."""
+        if not metadata:
+            return
+        info_str = " | ".join([f"{k}: {v}" for k, v in metadata.items()])
+        plt.figtext(
+            0.01, 0.01, info_str, fontsize=8, color="gray", alpha=0.7, ha="left"
+        )
+
+    def _save_and_close(self, sub_dir: str, prefix: str, metadata: dict = None) -> None:
+        """Общая логика рендера, сохранения файла и очистки памяти."""
+        self._add_watermark(metadata)
+
+        timestamp = int(time.time())
+        filename = f"{prefix}_{timestamp}.png"
+
+        out_path = self.session_dir / sub_dir / filename
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        plt.tight_layout()
+        plt.savefig(out_path, dpi=150)
+        plt.close()
+        logger.success(f"График {prefix} сохранен: {out_path}")

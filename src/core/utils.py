@@ -7,33 +7,33 @@ import time
 from razdel import sentenize
 import sys
 from dataclasses import dataclass
-import re
+from src.configs.configs import AgentConfigBundle
 
 
 class TextsSplitter:
     @staticmethod
     def split_text_to_sentences(text: str) -> list[str]:
-        cleaned_text = TextsSplitter._sanitize_drafter_text(text)
-        sentences = list(sentenize(cleaned_text))
+        # cleaned_text = TextsSplitter._sanitize_drafter_text(text)
+        sentences = list(sentenize(text))
         return [sentence.text for sentence in sentences]
 
-    @staticmethod
-    def _sanitize_drafter_text(text: str) -> str:
-        """
-        Нормализатор "грязного" текста от LLM.
-        Восстанавливает пунктуацию для корректной работы razdel.
-        """
-        # 1. Защита от "потерянных" точек перед переносом строки.
-        # Если перед \n нет знака препинания (., !, ?, :, ;), ставим точку принудительно.
-        text = re.sub(r"(?<![\.\!\?\:\;])(\s*\n)", r".\1", text)
+    # @staticmethod
+    # def _sanitize_drafter_text(text: str) -> str:
+    #     """
+    #     Нормализатор "грязного" текста от LLM.
+    #     Восстанавливает пунктуацию для корректной работы razdel.
+    #     """
+    #     # 1. Защита от "потерянных" точек перед переносом строки.
+    #     # Если перед \n нет знака препинания (., !, ?, :, ;), ставим точку принудительно.
+    #     text = re.sub(r"(?<![\.\!\?\:\;])(\s*\n)", r".\1", text)
 
-        # 2. Гарантия точки после семантических тегов.
-        text = re.sub(r"(\[[А-ЯЁA-Z]+\])(?!\s*[\.\!\?\,\:])", r"\1.", text)
+    #     # 2. Гарантия точки после семантических тегов.
+    #     text = re.sub(r"(\[[А-ЯЁA-Z]+\])(?!\s*[\.\!\?\,\:])", r"\1.", text)
 
-        # 3. Базовая очистка мусорных пробелов, чтобы не плодить пустые токены
-        text = re.sub(r"[ \t]{2,}", " ", text)
+    #     # 3. Базовая очистка мусорных пробелов, чтобы не плодить пустые токены
+    #     text = re.sub(r"[ \t]{2,}", " ", text)
 
-        return text
+    #     return text
 
     @staticmethod
     def split_text_to_tokens(
@@ -60,28 +60,6 @@ def log_retry_attempt(retry_state):
         f"Сбой выполнения. Попытка {retry_state.attempt_number}. "
         f"Ожидание {retry_state.next_action.sleep} сек. Ошибка: {exception}"
     )
-
-
-def bad_words_id_generate(tokenizer, bad_words: list[str]) -> list[list[int]]:
-    seen = set()
-    bad_words_ids = []
-    for word in bad_words:
-        variants = [word, f" {word}"]
-        for variant in variants:
-            ids = tokenizer.encode(variant, add_special_tokens=False)
-
-            if not ids:
-                continue
-
-            ids_tuple = tuple(ids)
-
-            if ids_tuple in seen:
-                continue
-
-            seen.add(ids_tuple)
-            bad_words_ids.append(ids)
-
-    return bad_words_ids
 
 
 class LoadPrompts:
@@ -122,8 +100,26 @@ def check_path_is(func):
 
 @dataclass
 class ColoursForTqdm:
-    first_level: str = "#f5eee6"
-    second_level: str = "#f3d7ca"
-    third_level: str = "#e6a4b4"
-    fourth_level: str = "#c86b85"
-    fifth_level: str = "#773245"
+    first_level: str = "#002b00"
+    second_level: str = "#005f00"
+    third_level: str = "#00af00"
+    fourth_level: str = "#00ff00"
+    fifth_level: str = "#afff00"
+
+
+def load_agent_bundle(
+    yaml_path,
+    cls_init_config,
+    cls_gen_config,
+    cls_app_config,
+) -> AgentConfigBundle:
+    with open(yaml_path, "r", encoding="utf-8") as file:
+        config = yaml.safe_load(file)
+
+    init_config = cls_init_config(**config.get("init_config", {}))
+    gen_config = cls_gen_config(**config.get("gen_config", {}))
+    app_config = cls_app_config(**config.get("app_config", {}))
+
+    return AgentConfigBundle(
+        init_config=init_config, gen_config=gen_config, app_config=app_config
+    )
