@@ -1,6 +1,6 @@
 # LongConspectWriter: Local Multi-Agent System For Generating Long Academic Conspect
 
-[README.ru.md in Russian](README.ru.md) | README.md in English
+README.md in English | [README.ru.md in Russian](README.ru.md)
 
 ## Table of Contents
 - [System Architecture](#system-architecture)
