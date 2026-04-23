@@ -113,4 +113,4 @@ uv run python __main__.py --action synthesizer --path_to_file "data/example-clus
 
 Примеры конспектов сгенерированных с помощью LongConspectWriter вы можете прочитать в папке [examples](examples).
 
-Актуальные примеры находятся в папке: [examples/v1.0](examples/v1.0)
+Актуальные примеры находятся в папке: [examples/v1.5](examples/v1.5)

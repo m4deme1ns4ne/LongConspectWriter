@@ -114,4 +114,4 @@ Additional dataclass configuration descriptions are located in `src/configs/ai_c
 
 Examples of conspects generated with LongConspectWriter can be found in the [examples](examples) directory.
 
-Current examples are located in: [examples/v1.0](examples/v1.0)
+Current examples are located in: [examples/v1.5](examples/v1.5)

@@ -1,6 +1,7 @@
 data/
 src/tests/test_data/
 .models/
+.tasks.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
