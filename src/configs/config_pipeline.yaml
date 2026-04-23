@@ -1,4 +1,2 @@
 app_config:
   output_dir: "data/"
-  local_clustering_model: "cointegrated/rubert-tiny2"
-  global_clustering_model: "intfloat/multilingual-e5-small"

@@ -7,7 +7,7 @@ from loguru import logger
 
 
 class LocalClusterVisualizer(BaseClusterVisualizer):
-    def plot(self, labels: np.ndarray, metadata: dict = None):
+    def run(self, labels: np.ndarray, metadata: dict = None):
         """Отрисовка хронологической гистограммы локальных кластеров."""
         cluster_sizes = {}
         for label in labels:
@@ -29,7 +29,7 @@ class LocalClusterVisualizer(BaseClusterVisualizer):
 
 
 class GlobalClusterVisualizer(BaseClusterVisualizer):
-    def plot(
+    def run(
         self,
         embeddings: np.ndarray,
         assignments: list,

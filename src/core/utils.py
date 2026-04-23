@@ -109,17 +109,15 @@ class ColoursForTqdm:
 
 def load_agent_bundle(
     yaml_path,
-    cls_init_config,
-    cls_gen_config,
-    cls_app_config,
-) -> AgentConfigBundle:
+    cls_init_config=None,
+    cls_gen_config=None,
+    cls_app_config=None,
+):
     with open(yaml_path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
 
-    init_config = cls_init_config(**config.get("init_config", {}))
-    gen_config = cls_gen_config(**config.get("gen_config", {}))
-    app_config = cls_app_config(**config.get("app_config", {}))
+    init_cfg = cls_init_config(**config.get("init_config", {})) if cls_init_config else None
+    gen_cfg = cls_gen_config(**config.get("gen_config", {})) if cls_gen_config else None
+    app_cfg = cls_app_config(**config.get("app_config", {})) if cls_app_config else None
 
-    return AgentConfigBundle(
-        init_config=init_config, gen_config=gen_config, app_config=app_config
-    )
+    return AgentConfigBundle(init_config=init_cfg, gen_config=gen_cfg, app_config=app_cfg)

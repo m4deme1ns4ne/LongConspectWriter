@@ -11,23 +11,15 @@ import matplotlib
 matplotlib.use("Agg")
 
 from src.core.utils import TextsSplitter
-from src.core.base import BaseClusterizer
+from src.core.base import BaseLocalClusterizer, BaseGlobalClusterizer
 from src.core.vizualization import LocalClusterVisualizer, GlobalClusterVisualizer
 
 
-class SemanticLocalClusterizer(BaseClusterizer):
-    def __init__(
-        self,
-        model_name,
-        session_dir: Path,
-        threshold: float = 0.25,
-        linkage: str = "complete",
-    ):
-        self.model_name = model_name
-        self.model = SentenceTransformer(model_name)
+class SemanticLocalClusterizer(BaseLocalClusterizer):
+    def __init__(self, init_config, gen_config, session_dir: Path):
         self.session_dir = session_dir
-        self.threshold = threshold
-        self.linkage = linkage
+        super().__init__(init_config, gen_config)
+        self.model = SentenceTransformer(self._init_config.model_name)
 
     def run(self, path):
         with open(path, "r", encoding="utf-8") as file:
@@ -39,23 +31,26 @@ class SemanticLocalClusterizer(BaseClusterizer):
         embeddings = self.model.encode(sentences)
         n_samples = len(embeddings)
 
-        connectivity = np.eye(n_samples, k=1) + np.eye(n_samples, k=-1)
+        if self._gen_config.turn_on_connectivity is True:
+            connectivity = np.eye(n_samples, k=1) + np.eye(n_samples, k=-1)
+        else:
+            connectivity = None
         local_clusterer = AgglomerativeClustering(
-            n_clusters=None,
-            distance_threshold=self.threshold,
-            metric="cosine",
-            linkage=self.linkage,
+            n_clusters=self._gen_config.n_clusters,
+            distance_threshold=self._gen_config.threshold,
+            metric=self._gen_config.metric,
+            linkage=self._gen_config.linkage,
             connectivity=connectivity,
         )
         labels = local_clusterer.fit_predict(embeddings)
         metadata = {
-            "Model": self.model_name,
-            "Threshold": self.threshold,
-            "Linkage": self.linkage,
+            "Model": self._init_config.model_name,
+            "Threshold": self._gen_config.threshold,
+            "Linkage": self._gen_config.linkage,
             "Sentences": len(sentences),
         }
         visualizer = LocalClusterVisualizer(self.session_dir)
-        visualizer.plot(labels, metadata)
+        visualizer.run(labels, metadata)
 
         clusters = self._format_cluster_output(sentences, labels)
 
@@ -95,11 +90,11 @@ class SemanticLocalClusterizer(BaseClusterizer):
         return formated_clusters
 
 
-class SemanticGlobalClusterizer(BaseClusterizer):
-    def __init__(self, model_name, session_dir: Path):
-        self.model_name = model_name
-        self.model = SentenceTransformer(model_name)
+class SemanticGlobalClusterizer(BaseGlobalClusterizer):
+    def __init__(self, init_config, session_dir: Path):
         self.session_dir = session_dir
+        super().__init__(init_config)
+        self.model = SentenceTransformer(self._init_config.model_name)
 
     def run(self, plan_path, local_clusters_path):
 
@@ -129,7 +124,6 @@ class SemanticGlobalClusterizer(BaseClusterizer):
         _, assignments_tensor = torch.max(scores, dim=1)
         assignments = assignments_tensor.tolist()
 
-        # НОВЫЙ БЛОК: Монотонное сглаживание хронологии
         smoothed_assignments = []
         current_chapter = 0  # Начинаем с первой главы
 
@@ -156,14 +150,12 @@ class SemanticGlobalClusterizer(BaseClusterizer):
         assignments = smoothed_assignments
 
         metadata = {
-            "Model": self.model_name,
+            "Model": self._init_config.model_name,
             "Metric": "cosine",
             "Chapters": len(chapter_titles),
         }
         visualizer = GlobalClusterVisualizer(self.session_dir)
-        visualizer.plot(
-            local_clusters_embeddings, assignments, chapter_titles, metadata
-        )
+        visualizer.run(local_clusters_embeddings, assignments, chapter_titles, metadata)
 
         for chunk_idx, chapter_idx in enumerate(assignments):
             global_clusters[chapter_titles[chapter_idx]].append(

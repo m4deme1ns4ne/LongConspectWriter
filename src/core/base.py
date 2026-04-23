@@ -6,6 +6,9 @@ from src.configs.configs import (
     LLMInitConfig,
     LLMGenConfig,
     LLMAppConfig,
+    LocalClusterizerInitConfig,
+    LocalClusterizerGenConfig,
+    GlobalClusterizerInitConfig
 )
 from dataclasses import asdict
 from tenacity import retry, stop_after_attempt, wait_fixed
@@ -107,6 +110,7 @@ class BaseLlamaCppAgent(BaseLLMAgent):
         gen_config: LLMGenConfig,
         app_config: LLMAppConfig,
     ) -> None:
+        super().__init__()
         self._init_config = init_config
         self._gen_config = gen_config
         self._app_config = app_config
@@ -182,6 +186,7 @@ class BaseSTTAgent(BaseAgent):
         gen_config: STTGenConfig,
         app_config: AppSTTConfig,
     ) -> None:
+        super().__init__()
         self._init_config = init_config
         self._gen_config = gen_config
         self._app_config = app_config
@@ -212,18 +217,34 @@ class BaseSTTAgent(BaseAgent):
                 self._app_config.the_subject_lecture
             ]
 
+class BaseLocalClusterizer(Trackable, Base):
+    def __init__(
+        self,
+        init_config: LocalClusterizerInitConfig,
+        gen_config: LocalClusterizerGenConfig,
+    ) -> None:
+        super().__init__()
+        self._init_config = init_config
+        self._gen_config = gen_config
 
-class BaseClusterizer(Trackable, Base):
-    pass
+
+class BaseGlobalClusterizer(Trackable, Base):
+    def __init__(
+        self,
+        init_config: GlobalClusterizerInitConfig,
+    ) -> None:
+        super().__init__()
+        self._init_config = init_config
 
 
 class BasePipeline(Trackable, Base):
     def __post_init__(self) -> None:
 
         output_dir = Path(self.pipeline_config.output_dir)
+        now = datetime.now()
 
         self.actual_session_dir = (
-            output_dir / "runs" / datetime.now().strftime("%Y.%m.%d___%H.%M.%S")
+            output_dir / "runs" / now.strftime("%Y.%m.%d") / now.strftime("%H.%M.%S")
         )
         self.actual_session_dir.mkdir(exist_ok=False, parents=True)
 
@@ -232,7 +253,7 @@ class BasePipeline(Trackable, Base):
         )
 
 
-class BaseClusterVisualizer:
+class BaseClusterVisualizer(Trackable):
     def __init__(self, session_dir: Path):
         self.session_dir = session_dir
 

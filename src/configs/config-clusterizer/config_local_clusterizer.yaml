@@ -1,0 +1,11 @@
+# Local Clusterizer
+
+init_config:
+  model_name: "cointegrated/rubert-tiny2"
+
+gen_config:
+  threshold: 0.4
+  linkage: "complete"
+  turn_on_connectivity: true
+  metric: "cosine"
+  n_clusters: null

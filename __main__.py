@@ -2,7 +2,6 @@ import os
 import yaml
 import argparse
 from pathlib import Path
-# import warnings
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -18,10 +17,11 @@ from src.configs.configs import (
     LLMAppConfig,
     PipelineConfig,
     PipelineSessionConfig,
+    LocalClusterizerInitConfig,
+    LocalClusterizerGenConfig,
+    GlobalClusterizerInitConfig,
 )
 from src.core.utils import load_agent_bundle
-
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
 def main() -> None:
@@ -118,6 +118,15 @@ def main() -> None:
             LLMAppConfig,
         )
 
+        local_cluster_bundle = load_agent_bundle(
+            "src/configs/config-clusterizer/config_local_clusterizer.yaml",
+            LocalClusterizerInitConfig, LocalClusterizerGenConfig, None
+        )
+        global_cluster_bundle = load_agent_bundle(
+            "src/configs/config-clusterizer/config_global_clusterizer.yaml",
+            GlobalClusterizerInitConfig, None, None
+        )
+
         session_config = PipelineSessionConfig(
             pipeline=pipeline_config,
             stt=stt_bundle,
@@ -125,6 +134,8 @@ def main() -> None:
             synthesizer=synth_bundle,
             local_planner=lp_bundle,
             global_planner=gp_bundle,
+            local_clusterizer=local_cluster_bundle,
+            global_clusterizer=global_cluster_bundle
         )
 
         pipeline = LongConspectWriterPipeline(session_config)

@@ -67,15 +67,11 @@ class LongConspectWriterPipeline(BasePipeline):
 
     @check_path_is
     def _call_local_clustering(self, path: str | PathLike) -> str | PathLike:
-        """
-        Разбивает сплошной текст на смысловые абзацы.
-        Вход (path): Путь к сырой транскрипции (результат STT).
-        Выход: Путь к файлу, где текст разделен сепараторами (локальные кластеры).
-        """
         from src.core.clustering import SemanticLocalClusterizer
 
         model_local_clustering = SemanticLocalClusterizer(
-            self.pipeline_config.local_clustering_model,
+            init_config=self.config.local_clusterizer.init_config,
+            gen_config=self.config.local_clusterizer.gen_config,
             session_dir=self.actual_session_dir,
         )
         new_path = model_local_clustering.run(path)
@@ -141,21 +137,13 @@ class LongConspectWriterPipeline(BasePipeline):
         global_plan_path: str | PathLike,
         local_clusters_path: str | PathLike,
     ) -> str | PathLike:
-        """
-        Связывает оригинальные абзацы с главами оглавления через косинусное сходство.
-        Вход:
-          - global_plan_path: Путь к JSON-оглавлению.
-          - local_clusters_path: Путь к оригинальным локальным кластерам (абзацам).
-        Выход: Путь к глобальным кластерам (Json)
-        """
         from src.core.clustering import SemanticGlobalClusterizer
 
         model_global_clustering = SemanticGlobalClusterizer(
-            self.pipeline_config.global_clustering_model,
+            init_config=self.config.global_clusterizer.init_config,
             session_dir=self.actual_session_dir,
         )
         new_path = model_global_clustering.run(global_plan_path, local_clusters_path)
-
         return new_path
 
     @check_path_is

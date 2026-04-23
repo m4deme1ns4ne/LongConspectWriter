@@ -80,8 +80,6 @@ class LLMAppConfig:
 @dataclass
 class PipelineConfig:
     output_dir: str | os.PathLike
-    local_clustering_model: str
-    global_clustering_model: str
 
 
 @dataclass
@@ -95,11 +93,30 @@ class AgentConfigBundle:
 
 @dataclass
 class PipelineSessionConfig:
-    """Корневой конфиг для запуска всего пайплайна."""
-
-    pipeline: Any
+    pipeline: PipelineConfig
     stt: AgentConfigBundle
     drafter: AgentConfigBundle
     synthesizer: AgentConfigBundle
     local_planner: AgentConfigBundle
     global_planner: AgentConfigBundle
+    local_clusterizer: AgentConfigBundle
+    global_clusterizer: AgentConfigBundle
+
+
+@dataclass
+class LocalClusterizerInitConfig:
+    model_name: str
+
+
+@dataclass
+class LocalClusterizerGenConfig:
+    threshold: float
+    linkage: str
+    turn_on_connectivity: bool
+    metric: str
+    n_clusters: bool | int
+
+
+@dataclass
+class GlobalClusterizerInitConfig:
+    model_name: str
