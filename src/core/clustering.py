@@ -35,6 +35,7 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
             connectivity = np.eye(n_samples, k=1) + np.eye(n_samples, k=-1)
         else:
             connectivity = None
+
         local_clusterer = AgglomerativeClustering(
             n_clusters=self._gen_config.n_clusters,
             distance_threshold=self._gen_config.threshold,
@@ -42,17 +43,24 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
             linkage=self._gen_config.linkage,
             connectivity=connectivity,
         )
-        labels = local_clusterer.fit_predict(embeddings)
+
+        raw_labels = local_clusterer.fit_predict(embeddings)
+
+        min_s = 5
+        clusters, final_labels = self._format_cluster_output(
+            sentences, raw_labels, min_sentences=min_s
+        )
+
         metadata = {
             "Model": self._init_config.model_name,
             "Threshold": self._gen_config.threshold,
             "Linkage": self._gen_config.linkage,
             "Sentences": len(sentences),
+            "Min_Sentences_Buffer": min_s,
         }
-        visualizer = LocalClusterVisualizer(self.session_dir)
-        visualizer.run(labels, metadata)
 
-        clusters = self._format_cluster_output(sentences, labels)
+        visualizer = LocalClusterVisualizer(self.session_dir)
+        visualizer.run(final_labels, metadata)
 
         out_filepath = self._safe_result_out_line(
             output_dict=clusters,
@@ -61,33 +69,37 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
             session_dir=self.session_dir,
         )
 
-        logger.info(f"Локальных кластеров: {len(clusters)}")
-        logger.debug(f"Type local clusters: {type(clusters)}")
+        logger.info(f"Финальных локальных кластеров: {len(clusters)}")
 
         return out_filepath
 
-    def _format_cluster_output(self, sentences, labels):
-        grouped_data = {}
-        for index, (items, label) in enumerate(zip(sentences, labels)):
-            label = int(label)
+    def _format_cluster_output(self, sentences, raw_labels, min_sentences=5):
+        chunks = []
+        current_chunk = []
+        current_label = raw_labels[0]
 
-            if label not in grouped_data:
-                grouped_data[label] = {"index": index, "text": []}
+        for sentence, label in zip(sentences, raw_labels):
+            if label != current_label and len(current_chunk) >= min_sentences:
+                chunks.append(current_chunk)
+                current_chunk = []
 
-            grouped_data[label]["text"].append(items)
+            current_label = label
+            current_chunk.append(sentence)
 
-        grouped_data = sorted(grouped_data.items(), key=lambda index: index[1]["index"])
-        new_grouped_data = []
-        for cluster in grouped_data:
-            new_grouped_data.append(cluster[1])
-
-        new_grouped_data = [" ".join(_["text"]) for _ in new_grouped_data]
+        if current_chunk:
+            if len(current_chunk) < min_sentences and chunks:
+                chunks[-1].extend(current_chunk)
+            else:
+                chunks.append(current_chunk)
 
         formated_clusters = {}
-        for i, cluster in enumerate(new_grouped_data):
-            formated_clusters[i] = cluster
+        final_labels = []
 
-        return formated_clusters
+        for i, chunk in enumerate(chunks):
+            formated_clusters[i] = " ".join(chunk)
+            final_labels.extend([i] * len(chunk))
+
+        return formated_clusters, np.array(final_labels)
 
 
 class SemanticGlobalClusterizer(BaseGlobalClusterizer):

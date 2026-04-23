@@ -4,7 +4,7 @@ init_config:
   model_name: "cointegrated/rubert-tiny2"
 
 gen_config:
-  threshold: 0.4
+  threshold: 0.5
   linkage: "complete"
   turn_on_connectivity: true
   metric: "cosine"
