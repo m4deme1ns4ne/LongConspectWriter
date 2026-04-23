@@ -15,21 +15,17 @@
 
 ```mermaid
 flowchart TD
-    Audio["Audio"] --> STT["STT<br/>(Generating Transcription)"]
-    
-    STT -->  LCluster["Local Clustering<br/>(Generating Local clusters)"]
+    Audio["Audio"] --> STT["STT<br/>(Generating transcription)"]
 
-    LCluster --> LPlanner["Agent: Local Planner<br/>(Generating Local topics)"]
-    
-    LPlanner --> GPlanner["Agent: Global Planner<br/>(Generating Global topics)"]
-    
-    LCluster & GPlanner --> GCluster["Global Clustering<br/>(Generating Global clusters)"]
-    
-    GCluster --> Synthesizer["Agent: Synthesizer<br/>(Rendering of the academic summary)"]
-    
-    Synthesizer --> JSON["JSON Conspect"]
+    STT --> LCluster["Local Clustering<br/>(Building local semantic chunks)"]
+    LCluster --> LPlanner["Agent: Local Planner<br/>(Generating local topics)"]
+    LPlanner --> GPlanner["Agent: Global Planner<br/>(Generating chapter outline)"]
 
-    JSON --> MD["Markdown Conspect"]
+    LCluster & GPlanner --> GCluster["Global Clustering<br/>(Aligning chunks to chapters)"]
+    GCluster --> Synthesizer["Agent: Synthesizer<br/>(Rendering the academic summary)"]
+
+    Synthesizer --> JSON["JSON conspect"]
+    JSON --> MD["Markdown conspect"]
 ```
 
 ## LongConspectWriter Deployment
@@ -53,7 +49,6 @@ uv run python __main__.py --action all --path_to_file "data/example-audio/your_l
 
 ```bash
 uv run python __main__.py --action stt --path_to_file "data/example-audio/your_lecture.mp3"
-uv run python __main__.py --action drafter --path_to_file "data/example-transcrib/your_transcript.txt"
 uv run python __main__.py --action local_clustering --path_to_file "data/example-transcrib/your_transcript.txt"
 uv run python __main__.py --action local_planner --path_to_file "data/example-clusters/example-local-clusters/your_clusters.txt"
 uv run python __main__.py --action global_planner --path_to_file "data/example-plan/example-local-plan/your_local_plan.txt"
@@ -84,18 +79,16 @@ Table with all available commands:
 
 ## Output Artifacts
 
-LongConspectWriter saves intermediate states to disk.
+LongConspectWriter generates intermediate artifacts automatically as the pipeline runs.  
+They are stored in the current session directory and organized by stage:
 
-| Directory | Artifact |
-| --- | --- |
-| `data/example-transcrib/` | Raw transcription after FasterWhisper |
-| `data/example-mini-conspect/` | High-quality transcription |
-| `data/example-clusters/example-local-clusters/` | Local clusters |
-| `data/example-plan/example-local-plan/` | Local topics |
-| `data/example-plan/example-global-plan/` | Global topics |
-| `data/example-clusters/example-global-clusters/` | Global clusters |
-| `data/example-conspect/` | Conspect in JSON format |
-| `data/example-final-conspect/` | Conspect in `.md` format |
+- `01_stt/` - raw transcription after FasterWhisper
+- `02_local_clusters/` - local clusters
+- `03_local_planners/` - local topics
+- `04_global_planners/` - chapter outline
+- `05_global_clusters/` - global clusters
+- `06_synthesizer/` - JSON conspect
+- `07_conspect_md/` - final Markdown conspect
 
 ## Configuration
 
