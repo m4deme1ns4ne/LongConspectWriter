@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import torch
 import os
+from typing import Any
 
 
 @dataclass
@@ -69,8 +70,36 @@ class LLMGenConfig:
 class LLMAppConfig:
     agent_name: str
     prompt_path: str | os.PathLike
+    chunk_size_ratio: float | None = None
+    chunk_overlap_ratio: float | None = None
+    max_tokens_for_summary_ratio: float | None = None
+    max_history_tokens: float | None = None
+    max_tokens_for_compressed_summary_ratio: float | None = None
 
 
 @dataclass
 class PipelineConfig:
     output_dir: str | os.PathLike
+    local_clustering_model: str
+    global_clustering_model: str
+
+
+@dataclass
+class AgentConfigBundle:
+    """Группирует все конфиги для одного агента."""
+
+    init_config: Any
+    gen_config: Any
+    app_config: Any
+
+
+@dataclass
+class PipelineSessionConfig:
+    """Корневой конфиг для запуска всего пайплайна."""
+
+    pipeline: Any
+    stt: AgentConfigBundle
+    drafter: AgentConfigBundle
+    synthesizer: AgentConfigBundle
+    local_planner: AgentConfigBundle
+    global_planner: AgentConfigBundle
