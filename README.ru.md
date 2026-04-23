@@ -1,4 +1,4 @@
-# LongConspectWriter: Local Multi-Agent System For Generating Long Academic Notes
+# LongConspectWriter: Local Multi-Agent System For Generating Long Academic Conspect
 
 [README.md in english](README.md) | README.md на русском
 
@@ -15,13 +15,11 @@
 
 ```mermaid
 flowchart TD
-    Audio["Audio"] --> STT["STT<br/>(Audio to text translation)"]
+    Audio["Audio"] --> STT["STT<br/>(Generating Transcription)"]
     
-    STT -->  Drafter["Agent: Drafter<br/>(Cleaning up transcription and tagging)"]
-    
-    Drafter -->  LCluster["Local Clustering<br/>(Cleaning up transcription)"]
-    
-    LCluster --> LPlanner["Agent: Local Planner<br/>(Generating Local clusters)"]
+    STT -->  LCluster["Local Clustering<br/>(Generating Local clusters)"]
+
+    LCluster --> LPlanner["Agent: Local Planner<br/>(Generating Local topics)"]
     
     LPlanner --> GPlanner["Agent: Global Planner<br/>(Generating Global topics)"]
     
