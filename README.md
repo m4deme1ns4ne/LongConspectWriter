@@ -37,6 +37,8 @@ flowchart TD
 - CUDA-compatible environment
 - local GGUF weights
 
+**Local GGUF weights must be downloaded separately and saved to the `.models` directory. In the configs under `src/configs/config-agents/`, specify the path to the weights for each agent in the corresponding `config_agentname.yaml` file.**
+
 ### Run the full pipeline
 
 ```bash
@@ -104,8 +106,6 @@ Current default configuration:
 | Global embeddings | `intfloat/multilingual-e5-small` |
 
 Additional dataclass configuration descriptions are located in `src/configs/ai_configs.py`.
-
-**Local GGUF weights must be downloaded separately and saved to the `.models` directory. In the configs under `src/configs/config-agents/`, specify the path to the weights for each agent in the corresponding `config_agentname.yaml` file.**
 
 ## Evaluation
 ...
