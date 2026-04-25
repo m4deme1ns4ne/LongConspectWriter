@@ -16,4 +16,4 @@ gen_config:
 app_config:
   agent_name: "global_planner"
   prompt_path: "src/configs/config-agents/global_planner/prompt_global_planner.yaml"
-  scheme_output_path: "src/configs/config-agents/global_planner/scheme_output.json"
+  scheme_output_path: "src/configs/config-agents/global_planner/agent_global_planner_scheme_output.json"

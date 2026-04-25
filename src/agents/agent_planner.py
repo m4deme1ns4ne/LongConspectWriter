@@ -88,7 +88,7 @@ class AgentGlobalPlanner(BaseLlamaCppAgent):
             total=self._gen_config.max_tokens,
             desc="Генерация токенов",
             unit="токен",
-            colour="blue",
+            colour=ColoursForTqdm.first_level,
             leave=False,
             position=1,
             file=sys.stdout,
