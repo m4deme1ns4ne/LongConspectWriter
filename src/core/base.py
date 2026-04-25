@@ -50,6 +50,7 @@ class Base(ABC):
         file_name: str,
         session_dir: Path,
         extension: str = "json",
+        extension_file_writer: str = "w",
     ) -> Path:
 
         actual_stage_path = session_dir / stage
@@ -59,10 +60,12 @@ class Base(ABC):
         output_file_path = actual_stage_path / file_name
 
         if extension == "json":
-            with open(output_file_path, "w", encoding="utf-8") as file:
+            with open(
+                output_file_path, extension_file_writer, encoding="utf-8"
+            ) as file:
                 json.dump(output_dict, file, ensure_ascii=False, indent=4)
         elif extension == "md":
-            with open(output_file_path, "w", encoding="utf-8") as f:
+            with open(output_file_path, extension_file_writer, encoding="utf-8") as f:
                 f.write(str(output_dict))
         logger.success(
             f"Работа агента {self.__class__.__name__} сохранена в файл по пути: {output_file_path}"
@@ -80,12 +83,13 @@ class BaseAgent(Trackable, Base):
         return self
 
     def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
-        logger.debug(f"Очистка памяти от агента {self.__class__.__name__}...")
-        if hasattr(self, "model"):
-            del self.model
-        if hasattr(self, "tokenizer"):
-            del self.tokenizer
-        VRamCleaner.empty_vram(caller_name=self.__class__.__name__)
+        if getattr(self, "_owns_model", True):
+            logger.debug(f"Очистка памяти от агента {self.__class__.__name__}...")
+            if hasattr(self, "model"):
+                del self.model
+            if hasattr(self, "tokenizer"):
+                del self.tokenizer
+            VRamCleaner.empty_vram(caller_name=self.__class__.__name__)
 
 
 class BaseLLMAgent(BaseAgent):
@@ -109,6 +113,7 @@ class BaseLlamaCppAgent(BaseLLMAgent):
         init_config: LLMInitConfig,
         gen_config: LLMGenConfig,
         app_config: LLMAppConfig,
+        shared_model: Llama | None = None,
     ) -> None:
         super().__init__()
         self._init_config = init_config
@@ -118,9 +123,17 @@ class BaseLlamaCppAgent(BaseLLMAgent):
             f"Инициализация {self.__class__.__name__} (Модель: {self._init_config.model_path})"
         )
 
-        logger.info(f"Загрузка {self._init_config.model_path} в память...")
-        self.model = Llama(**asdict(self._init_config))
-        logger.info(f"Модель {self._init_config.model_path} загружена.")
+        if shared_model:
+            self.model = shared_model
+            self._owns_model = False
+            logger.warning(
+                f"Модель {self._init_config.model_path} уже была загружена в память."
+            )
+        else:
+            logger.info(f"Загрузка {self._init_config.model_path} в память...")
+            self.model = Llama(**asdict(self._init_config))
+            self._owns_model = True
+            logger.info(f"Модель {self._init_config.model_path} загружена.")
 
         self.prompts = LoadPrompts.load_prompts(self._app_config.prompt_path)
         self.system_prompt = self.prompts[self._app_config.agent_name]["system_prompt"]
@@ -136,17 +149,17 @@ class BaseLlamaCppAgent(BaseLLMAgent):
             f"Параметры использования агента {self.__class__.__name__}: {self._app_config}"
         )
 
-    def _build_prompt(self, tokenizer = None, **kwargs) -> list[dict[str]]:
+    def _build_prompt(self, tokenizer=None, **kwargs) -> list[dict[str]]:
         user_prompt = self.user_template.format(**kwargs)
         if tokenizer is not None:
-            len_tokenizer_system_prompt = len(tokenizer(self.system_prompt.encode("utf-8")))
+            len_tokenizer_system_prompt = len(
+                tokenizer(self.system_prompt.encode("utf-8"))
+            )
             len_tokenizer_user_prompt = len(tokenizer(user_prompt.encode("utf-8")))
             logger.debug(
                 f"Текущая длинна системного промпта: {len_tokenizer_system_prompt}"
             )
-            logger.debug(
-                f"Текущая длинна запроса: {len_tokenizer_user_prompt}"
-            )
+            logger.debug(f"Текущая длинна запроса: {len_tokenizer_user_prompt}")
             logger.debug(
                 f"Текущая длинна общая длинна контекста: {len_tokenizer_system_prompt + len_tokenizer_user_prompt}"
             )

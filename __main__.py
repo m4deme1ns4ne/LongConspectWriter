@@ -42,7 +42,6 @@ def main() -> None:
         choices=[
             "all",
             "stt",
-            "drafter",
             "synthesizer",
             "planner",
             "local_planner",
@@ -50,6 +49,7 @@ def main() -> None:
             "clustering",
             "local_clustering",
             "global_clustering",
+            "convert_json_to_md",
         ],
         default="all",
         help="Тип операция с MAS",
@@ -93,12 +93,6 @@ def main() -> None:
             STTGenConfig,
             AppSTTConfig,
         )
-        drafter_bundle = load_agent_bundle(
-            "src/configs/config-agents/drafter/config_drafter.yaml",
-            LLMInitConfig,
-            LLMGenConfig,
-            LLMAppConfig,
-        )
         synth_bundle = load_agent_bundle(
             "src/configs/config-agents/synthesizer/config_synthesizer.yaml",
             LLMInitConfig,
@@ -113,6 +107,12 @@ def main() -> None:
         )
         gp_bundle = load_agent_bundle(
             "src/configs/config-agents/global_planner/config_global_planner.yaml",
+            LLMInitConfig,
+            LLMGenConfig,
+            LLMAppConfig,
+        )
+        ex_bundle = load_agent_bundle(
+            "src/configs/config-agents/extractor/config_extractor_planner.yaml",
             LLMInitConfig,
             LLMGenConfig,
             LLMAppConfig,
@@ -134,12 +134,12 @@ def main() -> None:
         session_config = PipelineSessionConfig(
             pipeline=pipeline_config,
             stt=stt_bundle,
-            drafter=drafter_bundle,
             synthesizer=synth_bundle,
             local_planner=lp_bundle,
             global_planner=gp_bundle,
             local_clusterizer=local_cluster_bundle,
             global_clusterizer=global_cluster_bundle,
+            extractor=ex_bundle,
         )
 
         pipeline = LongConspectWriterPipeline(session_config)
@@ -203,6 +203,9 @@ def main() -> None:
 
         elif args.action == "clustering":
             output_path = pipeline._call_clustering(path_to_file)
+
+        elif args.action == "convert_json_to_md":
+            output_path = pipeline.convert_json_to_md(path_to_file)
 
     if output_path is not None:
         logger.info("Работа завершена.")

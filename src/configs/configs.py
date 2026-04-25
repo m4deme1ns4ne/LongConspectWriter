@@ -72,15 +72,14 @@ class LLMAppConfig:
     prompt_path: str | os.PathLike
     chunk_size_ratio: float | None = None
     chunk_overlap_ratio: float | None = None
-    max_tokens_for_summary_ratio: float | None = None
-    max_history_tokens: float | None = None
-    max_tokens_for_compressed_summary_ratio: float | None = None
+    last_tail_words_count: int = None
     scheme_output_path: dict = None
 
 
 @dataclass
 class PipelineConfig:
     output_dir: str | os.PathLike
+    lecture_theme: str = "universal"
 
 
 @dataclass
@@ -96,8 +95,8 @@ class AgentConfigBundle:
 class PipelineSessionConfig:
     pipeline: PipelineConfig
     stt: AgentConfigBundle
-    drafter: AgentConfigBundle
     synthesizer: AgentConfigBundle
+    extractor: AgentConfigBundle
     local_planner: AgentConfigBundle
     global_planner: AgentConfigBundle
     local_clusterizer: AgentConfigBundle

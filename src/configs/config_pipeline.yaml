@@ -1,2 +1,3 @@
 app_config:
   output_dir: "data/"
+  lecture_theme: "math"

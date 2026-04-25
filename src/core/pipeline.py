@@ -3,8 +3,8 @@ from src.core.base import BasePipeline
 from src.core.utils import check_path_is
 from loguru import logger
 import multiprocessing
-import json
 from src.configs.configs import PipelineSessionConfig
+import json
 
 
 class LongConspectWriterPipeline(BasePipeline):
@@ -169,14 +169,16 @@ class LongConspectWriterPipeline(BasePipeline):
     ) -> str | PathLike:
         """
         Запускает AgentSynthesizer для синтеза финального конспекта.
+        Внутри себя он поднимет AgentExtractor для обновления контекста лекции.
         """
-
         from src.agents.agent_synthesizer import AgentSynthesizerLlama
 
         with AgentSynthesizerLlama(
             init_config=self.config.synthesizer.init_config,
             gen_config=self.config.synthesizer.gen_config,
             app_config=self.config.synthesizer.app_config,
+            extractor_gen_config=self.config.extractor.gen_config,
+            extractor_app_config=self.config.extractor.app_config,
             session_dir=self.actual_session_dir,
         ) as synthesizer:
             new_path = synthesizer.run(path)

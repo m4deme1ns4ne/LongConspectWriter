@@ -6,29 +6,106 @@ import json
 from loguru import logger
 from src.core.base import BaseLlamaCppAgent
 from src.core.utils import TextsSplitter, ColoursForTqdm
+from src.agents.agent_extractor import _AgentExtractor
 
 
 class AgentSynthesizerLlama(BaseLlamaCppAgent):
-    def __init__(self, init_config, gen_config, app_config, session_dir: Path):
+    def __init__(
+        self,
+        init_config,
+        gen_config,
+        app_config,
+        session_dir: Path,
+        extractor_gen_config,
+        extractor_app_config,
+    ):
         self.session_dir = session_dir
+        self.extractor_gen_config = extractor_gen_config
+        self.extractor_app_config = extractor_app_config
         super().__init__(init_config, gen_config, app_config)
+
+    def _generate_synthesizer_chunk(self, chunk, topik, already_seen_themes, last_tail):
+        with tqdm(
+            total=self._gen_config.max_tokens,
+            desc="Генерация токенов для чанка",
+            unit="токен",
+            colour=ColoursForTqdm.fourth_level,
+            leave=False,
+            position=2,
+            file=sys.stdout,
+            dynamic_ncols=True,
+        ) as chunk_token_pbar:
+            seen_str = (
+                ", ".join(already_seen_themes)
+                if already_seen_themes
+                else "Ничего ещё не было разобрано."
+            )
+
+            combined_context = (
+                f"[УЖЕ РАЗОБРАНО]: {seen_str}\n[КОНЕЦ ПРЕДЫДУЩЕГО ЧАНКА]: {last_tail}"
+            )
+
+            response = self._generate(
+                prompt=self._build_prompt(
+                    chunk=chunk,
+                    cluster_topik=topik,
+                    previous_context=combined_context,
+                    tokenizer=self.model.tokenize,
+                ),
+                stream=True,
+                token_pbar=chunk_token_pbar,
+            )
+        logger.debug(
+            f"Сгенерирован новый чанк конспекта, его длина: {
+                len(self.model.tokenize(response.encode('utf-8')))
+            }."
+        )
+        return response
+
+    def _generate_synthesizer(
+        self, split_clusters, topik, conspect, already_seen_themes
+    ):
+        extractor = _AgentExtractor(
+            init_config=self._init_config,
+            gen_config=self.extractor_gen_config,
+            app_config=self.extractor_app_config,
+            session_dir=self.session_dir,
+            shared_model=self.model,
+        )
+        last_tail = "Это начало лекции."
+        with tqdm(
+            total=len(split_clusters),
+            desc="Чанки",
+            unit="чанк",
+            colour=ColoursForTqdm.second_level,
+            leave=False,
+            position=1,
+            file=sys.stdout,
+            dynamic_ncols=True,
+        ) as chunk_pbar:
+            for chunk in split_clusters:
+                synthesize_chunk = self._generate_synthesizer_chunk(
+                    chunk=chunk,
+                    topik=topik,
+                    already_seen_themes=already_seen_themes,
+                    last_tail=last_tail,
+                )
+                conspect[topik].append(synthesize_chunk)
+                last_tail = " ".join(
+                    synthesize_chunk.split()[-self._app_config.last_tail_words_count :]
+                )
+                extracted_dict = extractor.run(synthesizer_chunk=synthesize_chunk)
+                for term in extracted_dict.get("extracted_entities", []):
+                    already_seen_themes.add(term.lower())
+                chunk_pbar.update(1)
 
     def run(self, path: Path) -> str:
         with open(path, "r", encoding="utf-8") as file:
             global_clusters = json.load(file)
 
         conspect = {topik: [] for topik, _ in global_clusters.items()}
+        already_seen_themes = set()
 
-        max_tokens_for_summary = int(
-            self._app_config.max_tokens_for_summary_ratio * self._gen_config.max_tokens
-        )
-        rolling_summary = []
-        last_tail = "Это начало лекции."
-        max_history_tokens = int(
-            self._app_config.max_history_tokens * self._gen_config.max_tokens
-        )
-
-        # УРОВЕНЬ 1: Цикл по глобальным темам (Кластерам)
         with tqdm(
             total=len(global_clusters),
             unit="кластер",
@@ -38,8 +115,8 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
             file=sys.stdout,
             dynamic_ncols=True,
         ) as pbar:
-            for topik, clusters in global_clusters.items():
-                full_text = " ".join(clusters)
+            for topik, cluster_text in global_clusters.items():
+                full_text = " ".join(cluster_text)
                 split_clusters: list[str] = TextsSplitter.split_text_to_tokens(
                     text=full_text,
                     tokenizer=self.model.tokenize,
@@ -52,155 +129,13 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
                     ),
                 )
 
-                # УРОВЕНЬ 2: Цикл по кускам текста внутри темы
-                with tqdm(
-                    total=len(split_clusters),
-                    desc="Чанки",
-                    unit="чанк",
-                    colour=ColoursForTqdm.second_level,
-                    leave=False,
-                    position=1,
-                    file=sys.stdout,
-                    dynamic_ncols=True,
-                ) as chunk_pbar:
-                    for chunk in split_clusters:
-                        # УРОВЕНЬ 3: Цикл генерации токенов для одного куска
-                        history = "\n".join(rolling_summary)
-                        history_tokens = len(
-                            self.model.tokenize(history.encode("utf-8"))
-                        )
-                        if history_tokens > max_history_tokens:
-                            logger.warning(
-                                f"Контекст превысил максимальное кол-во токенов: {max_history_tokens}. И составляет {history_tokens} токенов."
-                            )
-                            logger.warning("Запуск компрессора...")
-                            mega_prompt = [
-                                {
-                                    "role": "system",
-                                    "content": self.prompts[
-                                        self._app_config.agent_name
-                                    ]["mega_compressor"],
-                                },
-                                {
-                                    "role": "user",
-                                    "content": f"Скомпрессируй эти тезисы:\n{history}",
-                                },
-                            ]
-                            original_max_tokens = self._gen_config.max_tokens
-                            self._gen_config.max_tokens = int(
-                                self._gen_config.max_tokens
-                                * self._app_config.max_tokens_for_compressed_summary_ratio
-                            )
+                self._generate_synthesizer(
+                    topik=topik,
+                    conspect=conspect,
+                    split_clusters=split_clusters,
+                    already_seen_themes=already_seen_themes,
+                )
 
-                            with tqdm(
-                                total=self._gen_config.max_tokens,
-                                desc="Сжатие истории",
-                                unit="токен",
-                                colour=ColoursForTqdm.third_level,
-                                leave=False,
-                                position=2,
-                                file=sys.stdout,
-                                dynamic_ncols=True,
-                            ) as mega_pbar:
-                                try:
-                                    mega_summary = self._generate(
-                                        prompt=mega_prompt,
-                                        stream=True,
-                                        token_pbar=mega_pbar,
-                                    )
-                                finally:
-                                    self._gen_config.max_tokens = original_max_tokens
-                            tokens_mega_summary = len(
-                                self.model.tokenize(mega_summary.encode("utf-8"))
-                            )
-                            logger.warning(
-                                f"Предыдущие саммари сжаты до: {tokens_mega_summary}. Экономия {((1 - (tokens_mega_summary / history_tokens)) * 100):.1f}%"
-                            )
-
-                            rolling_summary = [f"[СЖАТАЯ ИСТОРИЯ]: {mega_summary}"]
-                            history = "\n".join(rolling_summary)
-
-                        combined_context = f"Текущее саммари предыдущих чанков:\n{history}\n\nПоследний абзац предыдущей главы:\n{last_tail}"
-
-                        with tqdm(
-                            total=self._gen_config.max_tokens,
-                            desc="Генерация токенов для чанка",
-                            unit="токен",
-                            colour=ColoursForTqdm.fourth_level,
-                            leave=False,
-                            position=2,
-                            file=sys.stdout,
-                            dynamic_ncols=True,
-                        ) as chunk_token_pbar:
-                            response = self._generate(
-                                prompt=self._build_prompt(
-                                    chunk=chunk,
-                                    cluster_topik=topik,
-                                    previous_context=combined_context,
-                                    tokenizer=self.model.tokenize
-                                ),
-                                stream=True,
-                                token_pbar=chunk_token_pbar,
-                            )
-                            logger.debug(
-                                f"Сгенерирован новый чанк конспекта, его длина: {
-                                    len(self.model.tokenize(response.encode('utf-8')))
-                                }."
-                            )
-                            # Сохраняем ответ
-                            conspect[topik].append(response)
-
-                            original_max_tokens = self._gen_config.max_tokens
-                            self._gen_config.max_tokens = max_tokens_for_summary
-                            summary_prompt = [
-                                {
-                                    "role": "system",
-                                    "content": self.prompts[
-                                        self._app_config.agent_name
-                                    ]["summary_synthesizer"],
-                                },
-                                {
-                                    "role": "user",
-                                    "content": f"Выпиши САМОЕ ГЛАВНОЕ из этого текста:\n{response}",
-                                },
-                            ]
-                            # УРОВЕНЬ 4: Генерация summary для следующего прохода агента
-                            with tqdm(
-                                total=max_tokens_for_summary,
-                                desc="Генерация токенов для саммари",
-                                unit="токен",
-                                colour=ColoursForTqdm.fifth_level,
-                                leave=False,
-                                position=3,
-                                file=sys.stdout,
-                                dynamic_ncols=True,
-                            ) as summary_token_pbar:
-                                try:
-                                    summary = self._generate(
-                                        prompt=summary_prompt,
-                                        stream=True,
-                                        token_pbar=summary_token_pbar,
-                                    )
-                                finally:
-                                    self._gen_config.max_tokens = original_max_tokens
-                                logger.debug(
-                                    f"Сгенерирован новый саммари конспекта, его длина: {
-                                        len(
-                                            self.model.tokenize(summary.encode('utf-8'))
-                                        )
-                                    }."
-                                )
-
-                        # Обновляем саммари
-                        rolling_summary.append(f"[{topik}]: {summary}")
-                        last_tail = " ".join(
-                            response.split()[-(self._gen_config.max_tokens // 5) :]
-                        )
-
-                        # Обновляем бар чанков (Уровень 2)
-                        chunk_pbar.update(1)
-
-                # Обновляем бар глобальных кластеров (Уровень 1)
                 pbar.update(1)
 
         logger.info("Генерация финального конспекта завершена.")

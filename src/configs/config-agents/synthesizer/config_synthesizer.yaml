@@ -18,6 +18,4 @@ app_config:
   prompt_path: "src/configs/config-agents/synthesizer/prompt_synthesizer.yaml"
   chunk_size_ratio: 0.7
   chunk_overlap_ratio: 0.25
-  max_tokens_for_summary_ratio: 0.05
-  max_history_tokens: 1
-  max_tokens_for_compressed_summary_ratio: 0.2
+  last_tail_words_count: 50

@@ -1,0 +1,57 @@
+from loguru import logger
+from tqdm import tqdm
+import sys
+from src.core.base import BaseLlamaCppAgent
+from pathlib import Path
+import json
+from src.core.utils import ColoursForTqdm
+
+
+class _AgentExtractor(BaseLlamaCppAgent):
+    def __init__(
+        self, init_config, gen_config, app_config, session_dir: Path, shared_model=None
+    ):
+        self.session_dir = session_dir
+        super().__init__(init_config, gen_config, app_config, shared_model=shared_model)
+        with open(self._app_config.scheme_output_path, "r", encoding="utf-8") as file:
+            scheme_output = json.load(file)
+        self.response_format = {"type": "json_object", "schema": scheme_output}
+
+    def run(self, synthesizer_chunk: str = None) -> str:
+        with tqdm(
+            total=self._gen_config.max_tokens,
+            desc="Экстракриция тем",
+            unit="токен",
+            colour=ColoursForTqdm.first_level,
+            leave=False,
+            position=1,
+            file=sys.stdout,
+            dynamic_ncols=True,
+        ) as token_pbar:
+            response = self._generate(
+                prompt=self._build_prompt(text=synthesizer_chunk),
+                stream=True,
+                token_pbar=token_pbar,
+                response_format=self.response_format,
+            )
+        logger.debug(
+            f"Экстракция чанка сгенерированного синтизером завершена, его длинна: {len(self.model.tokenize(response.encode('utf-8')))}"
+        )
+
+        try:
+            response_dict = json.loads(response)
+        except json.JSONDecodeError as error:
+            logger.error(
+                f"LLM вернула сломанный JSON, экстракция пропущена. Ошибка: {error}"
+            )
+            response_dict = {"extracted_entities": []}
+
+        _ = self._safe_result_out_line(
+            output_dict=response_dict,
+            stage="05.5_extractor/",
+            file_name="out_filepath.jsonl",
+            session_dir=self.session_dir,
+            extension_file_writer="a",
+        )
+
+        return response_dict
