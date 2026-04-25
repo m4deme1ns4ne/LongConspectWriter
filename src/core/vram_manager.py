@@ -1,23 +1,26 @@
 from loguru import logger
 import gc
 import torch
+import pynvml
 
 
 class VRamUsage:
     @staticmethod
     def get_vram_usage() -> str:
-        if not torch.cuda.is_available():
-            return "CPU"
-
         try:
-            device_index = torch.cuda.current_device()
-            props = torch.cuda.get_device_properties(device_index)
-            allocated = torch.cuda.memory_allocated(device_index) / (1024**2)
-            reserved = torch.cuda.memory_reserved(device_index) / (1024**2)
-            total = props.total_memory / (1024**2)
-            return allocated, reserved, total
-        except Exception as exc:
-            return f"GPU (usage unavailable: {exc})"
+            pynvml.nvmlInit()
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+
+            used = info.used / (1024**2)
+            total = info.total / (1024**2)
+            free = info.free / (1024**2)
+
+            pynvml.nvmlShutdown()
+            return used, free, total
+        except pynvml.NVMLError as exc:
+            logger.warning(f"Ошибка NVML: {exc}")
+            return 0, 0, 0
 
 
 class VRamCleaner:
