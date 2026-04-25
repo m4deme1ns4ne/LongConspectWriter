@@ -9,9 +9,9 @@ from dataclasses import asdict
 
 
 class FasterWhisper(BaseSTTAgent):
-    def __init__(self, init_config, gen_config, app_config, session_dir):
+    def __init__(self, session_dir, **kwargs):
         self.session_dir = session_dir
-        super().__init__(init_config, gen_config, app_config)
+        super().__init__(**kwargs)
 
     def run(self, audio_file_path: Path) -> str:
         """

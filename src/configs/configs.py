@@ -44,7 +44,6 @@ class STTGenConfig:
 class AppSTTConfig:
     agent_name: str
     prompt_path: str | os.PathLike
-    the_subject_lecture: str = None
 
 
 @dataclass

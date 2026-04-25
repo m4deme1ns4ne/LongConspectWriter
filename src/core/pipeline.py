@@ -29,10 +29,11 @@ class LongConspectWriterPipeline(BasePipeline):
             from src.core.stt import FasterWhisper
 
             faster_whisper = FasterWhisper(
+                session_dir=self.actual_session_dir,
                 init_config=self.config.stt.init_config,
                 gen_config=self.config.stt.gen_config,
                 app_config=self.config.stt.app_config,
-                session_dir=self.actual_session_dir,
+                lecture_theme=self.pipeline_config.lecture_theme,
             )
             transcript_path = faster_whisper.run(audio_file_path=path)
             result_queue.put({"status": "success", "path": transcript_path})
@@ -87,10 +88,11 @@ class LongConspectWriterPipeline(BasePipeline):
         from src.agents.agent_planner import AgentLocalPlanner
 
         with AgentLocalPlanner(
+            session_dir=self.actual_session_dir,
             init_config=self.config.local_planner.init_config,
             gen_config=self.config.local_planner.gen_config,
             app_config=self.config.local_planner.app_config,
-            session_dir=self.actual_session_dir,
+            lecture_theme=self.pipeline_config.lecture_theme,
         ) as planner:
             new_path = planner.run(path)
             return new_path
@@ -108,10 +110,11 @@ class LongConspectWriterPipeline(BasePipeline):
         from src.agents.agent_planner import AgentGlobalPlanner
 
         with AgentGlobalPlanner(
+            session_dir=self.actual_session_dir,
             init_config=self.config.global_planner.init_config,
             gen_config=self.config.global_planner.gen_config,
             app_config=self.config.global_planner.app_config,
-            session_dir=self.actual_session_dir,
+            lecture_theme=self.pipeline_config.lecture_theme,
         ) as planner:
             new_path = planner.run(path)
             return new_path
@@ -174,12 +177,13 @@ class LongConspectWriterPipeline(BasePipeline):
         from src.agents.agent_synthesizer import AgentSynthesizerLlama
 
         with AgentSynthesizerLlama(
+            session_dir=self.actual_session_dir,
+            extractor_gen_config=self.config.extractor.gen_config,
+            extractor_app_config=self.config.extractor.app_config,
             init_config=self.config.synthesizer.init_config,
             gen_config=self.config.synthesizer.gen_config,
             app_config=self.config.synthesizer.app_config,
-            extractor_gen_config=self.config.extractor.gen_config,
-            extractor_app_config=self.config.extractor.app_config,
-            session_dir=self.actual_session_dir,
+            lecture_theme=self.pipeline_config.lecture_theme,
         ) as synthesizer:
             new_path = synthesizer.run(path)
 

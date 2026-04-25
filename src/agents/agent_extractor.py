@@ -8,11 +8,9 @@ from src.core.utils import ColoursForTqdm
 
 
 class _AgentExtractor(BaseLlamaCppAgent):
-    def __init__(
-        self, init_config, gen_config, app_config, session_dir: Path, shared_model=None
-    ):
+    def __init__(self, session_dir: Path, **kwargs):
         self.session_dir = session_dir
-        super().__init__(init_config, gen_config, app_config, shared_model=shared_model)
+        super().__init__(**kwargs)
         with open(self._app_config.scheme_output_path, "r", encoding="utf-8") as file:
             scheme_output = json.load(file)
         self.response_format = {"type": "json_object", "schema": scheme_output}

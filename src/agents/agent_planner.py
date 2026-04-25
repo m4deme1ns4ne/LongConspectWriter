@@ -9,9 +9,9 @@ import ast
 
 
 class AgentLocalPlanner(BaseLlamaCppAgent):
-    def __init__(self, init_config, gen_config, app_config, session_dir: Path):
+    def __init__(self, session_dir: Path, **kwargs):
         self.session_dir = session_dir
-        super().__init__(init_config, gen_config, app_config)
+        super().__init__(**kwargs)
 
     def run(self, path: Path) -> str:
         with open(path, "r", encoding="utf-8") as file:
@@ -70,9 +70,9 @@ class AgentLocalPlanner(BaseLlamaCppAgent):
 
 
 class AgentGlobalPlanner(BaseLlamaCppAgent):
-    def __init__(self, init_config, gen_config, app_config, session_dir: Path):
+    def __init__(self, session_dir: Path, **kwargs):
         self.session_dir = session_dir
-        super().__init__(init_config, gen_config, app_config)
+        super().__init__(**kwargs)
 
     def run(self, path: Path) -> str:
         with open(path, "r", encoding="utf-8") as file:

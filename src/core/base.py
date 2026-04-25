@@ -113,6 +113,7 @@ class BaseLlamaCppAgent(BaseLLMAgent):
         init_config: LLMInitConfig,
         gen_config: LLMGenConfig,
         app_config: LLMAppConfig,
+        lecture_theme: str,
         shared_model: Llama | None = None,
     ) -> None:
         super().__init__()
@@ -136,7 +137,21 @@ class BaseLlamaCppAgent(BaseLLMAgent):
             logger.info(f"Модель {self._init_config.model_path} загружена.")
 
         self.prompts = LoadPrompts.load_prompts(self._app_config.prompt_path)
-        self.system_prompt = self.prompts[self._app_config.agent_name]["system_prompt"]
+        try:
+            self.system_prompt = self.prompts[self._app_config.agent_name][
+                "system_prompt"
+            ][lecture_theme]
+        except KeyError:
+            logger.warning(
+                f"Промпта для темы {lecture_theme} нету. Будет использован стандартный промпт 'universal'"
+            )
+            self.system_prompt = self.prompts[self._app_config.agent_name][
+                "system_prompt"
+            ]["universal"]
+
+        logger.info(
+            f"Загружен промпт для агента {self.__class__.__name__}, по тематике: {lecture_theme}"
+        )
         self.user_template = self.prompts[self._app_config.agent_name]["user_template"]
 
         logger.debug(
@@ -219,6 +234,7 @@ class BaseSTTAgent(BaseAgent):
         init_config: STTInitConfig,
         gen_config: STTGenConfig,
         app_config: AppSTTConfig,
+        lecture_theme: str,
     ) -> None:
         super().__init__()
         self._init_config = init_config
@@ -244,12 +260,18 @@ class BaseSTTAgent(BaseAgent):
         )
         self.prompt = LoadPrompts.load_prompts(self._app_config.prompt_path)
 
-        if self._app_config.the_subject_lecture is None:
-            self.initial_prompt = self.prompt[self._app_config.agent_name]["universal"]
-        else:
+        try:
             self.initial_prompt = self.prompt[self._app_config.agent_name][
-                self._app_config.the_subject_lecture
+                lecture_theme
             ]
+        except KeyError:
+            logger.warning(
+                f"Промпта для темы {lecture_theme} нету. Будет использован стандартный промпт 'universal'"
+            )
+            self.initial_prompt = self.prompt[self._app_config.agent_name]["universal"]
+        logger.info(
+            f"Загружен промпт для агента {self.__class__.__name__}, по тематике: {lecture_theme}"
+        )
 
 
 class BaseLocalClusterizer(Trackable, Base):

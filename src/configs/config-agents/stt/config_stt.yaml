@@ -21,4 +21,3 @@ gen_config:
 app_config:
   agent_name: "stt"
   prompt_path: "src/configs/config-agents/stt/prompt_stt.yaml"
-  the_subject_lecture: null

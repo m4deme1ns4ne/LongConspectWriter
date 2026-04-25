@@ -1,4 +1,4 @@
 grapher:
-  system_prompt: >
-
+  system_prompt:
+    universal: >
   user_template: >

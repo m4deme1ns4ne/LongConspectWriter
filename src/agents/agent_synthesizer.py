@@ -11,18 +11,15 @@ from src.agents.agent_extractor import _AgentExtractor
 
 class AgentSynthesizerLlama(BaseLlamaCppAgent):
     def __init__(
-        self,
-        init_config,
-        gen_config,
-        app_config,
-        session_dir: Path,
-        extractor_gen_config,
-        extractor_app_config,
+        self, session_dir: Path, extractor_gen_config, extractor_app_config, **kwargs
     ):
         self.session_dir = session_dir
         self.extractor_gen_config = extractor_gen_config
         self.extractor_app_config = extractor_app_config
-        super().__init__(init_config, gen_config, app_config)
+
+        self.lecture_theme = kwargs.get("lecture_theme", "universal")
+
+        super().__init__(**kwargs)
 
     def _generate_synthesizer_chunk(self, chunk, topik, already_seen_themes, last_tail):
         with tqdm(
@@ -71,6 +68,7 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
             app_config=self.extractor_app_config,
             session_dir=self.session_dir,
             shared_model=self.model,
+            lecture_theme=self.lecture_theme,
         )
         last_tail = "Это начало лекции."
         with tqdm(
