@@ -6,12 +6,15 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "dacite>=1.9.2",
+    "dawg-python>=0.7.2",
     "faster-whisper>=1.2.1",
+    "gliner>=0.2.26",
     "hdbscan>=0.8.42",
     "langchain-text-splitters>=1.1.1",
     "llama-cpp-python==0.3.20",
     "loguru>=0.7.3",
     "matplotlib>=3.10.8",
+    "nvidia-ml-py>=13.595.45",
     "packaging>=24.1",
     "pymorphy3>=2.0.6",
     "python-dotenv>=1.2.2",
