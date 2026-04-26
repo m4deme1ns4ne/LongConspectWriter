@@ -50,6 +50,8 @@ def main() -> None:
             "local_clustering",
             "global_clustering",
             "convert_json_to_md",
+            "grapher",
+            "add_graph_in_conspect",
         ],
         default="all",
         help="Тип операция с MAS",
@@ -78,6 +80,12 @@ def main() -> None:
         required=False,
         help="Путь к конфигу",
     )
+    parser.add_argument(
+        "--graphs_path",
+        type=str,
+        required=False,
+        help="Путь к JSON-файлу с путями сгенерированных графиков",
+    )
     args = parser.parse_args()
 
     args.output_file_path = "src/configs/config_pipeline.yaml"
@@ -86,92 +94,85 @@ def main() -> None:
         raw_pipeline_cfg = yaml.safe_load(file)
     pipeline_config = PipelineConfig(**raw_pipeline_cfg.get("app_config", {}))
 
-    if args.config_path is None:
-        stt_bundle = load_agent_bundle(
-            "src/configs/config-agents/stt/config_stt.yaml",
-            STTInitConfig,
-            STTGenConfig,
-            AppSTTConfig,
-        )
-        synth_bundle = load_agent_bundle(
-            "src/configs/config-agents/synthesizer/config_synthesizer.yaml",
-            LLMInitConfig,
-            LLMGenConfig,
-            LLMAppConfig,
-        )
-        lp_bundle = load_agent_bundle(
-            "src/configs/config-agents/local_planner/config_local_planner.yaml",
-            LLMInitConfig,
-            LLMGenConfig,
-            LLMAppConfig,
-        )
-        gp_bundle = load_agent_bundle(
-            "src/configs/config-agents/global_planner/config_global_planner.yaml",
-            LLMInitConfig,
-            LLMGenConfig,
-            LLMAppConfig,
-        )
-        ex_bundle = load_agent_bundle(
-            "src/configs/config-agents/extractor/config_extractor_planner.yaml",
-            LLMInitConfig,
-            LLMGenConfig,
-            LLMAppConfig,
-        )
+    stt_bundle = load_agent_bundle(
+        "src/configs/config-agents/stt/config_stt.yaml",
+        STTInitConfig,
+        STTGenConfig,
+        AppSTTConfig,
+    )
+    synth_bundle = load_agent_bundle(
+        "src/configs/config-agents/synthesizer/config_synthesizer.yaml",
+        LLMInitConfig,
+        LLMGenConfig,
+        LLMAppConfig,
+    )
+    lp_bundle = load_agent_bundle(
+        "src/configs/config-agents/local_planner/config_local_planner.yaml",
+        LLMInitConfig,
+        LLMGenConfig,
+        LLMAppConfig,
+    )
+    gp_bundle = load_agent_bundle(
+        "src/configs/config-agents/global_planner/config_global_planner.yaml",
+        LLMInitConfig,
+        LLMGenConfig,
+        LLMAppConfig,
+    )
+    ex_bundle = load_agent_bundle(
+        "src/configs/config-agents/extractor/config_extractor_planner.yaml",
+        LLMInitConfig,
+        LLMGenConfig,
+        LLMAppConfig,
+    )
 
-        local_cluster_bundle = load_agent_bundle(
-            "src/configs/config-clusterizer/config_local_clusterizer.yaml",
-            LocalClusterizerInitConfig,
-            LocalClusterizerGenConfig,
-            None,
-        )
-        global_cluster_bundle = load_agent_bundle(
-            "src/configs/config-clusterizer/config_global_clusterizer.yaml",
-            GlobalClusterizerInitConfig,
-            None,
-            None,
-        )
+    local_cluster_bundle = load_agent_bundle(
+        "src/configs/config-clusterizer/config_local_clusterizer.yaml",
+        LocalClusterizerInitConfig,
+        LocalClusterizerGenConfig,
+        None,
+    )
+    global_cluster_bundle = load_agent_bundle(
+        "src/configs/config-clusterizer/config_global_clusterizer.yaml",
+        GlobalClusterizerInitConfig,
+        None,
+        None,
+    )
 
-        session_config = PipelineSessionConfig(
-            pipeline=pipeline_config,
-            stt=stt_bundle,
-            synthesizer=synth_bundle,
-            local_planner=lp_bundle,
-            global_planner=gp_bundle,
-            local_clusterizer=local_cluster_bundle,
-            global_clusterizer=global_cluster_bundle,
-            extractor=ex_bundle,
-        )
+    grph_bundle = load_agent_bundle(
+        "src/configs/config-agents/grapher/config_grapher.yaml",
+        LLMInitConfig,
+        LLMGenConfig,
+        LLMAppConfig,
+    )
 
-        pipeline = LongConspectWriterPipeline(session_config)
-    else:
-        logger.warning("Архитектура с единым конфигом пока не реализована.")
-        return
+    session_config = PipelineSessionConfig(
+        pipeline=pipeline_config,
+        stt=stt_bundle,
+        synthesizer=synth_bundle,
+        local_planner=lp_bundle,
+        global_planner=gp_bundle,
+        local_clusterizer=local_cluster_bundle,
+        global_clusterizer=global_cluster_bundle,
+        extractor=ex_bundle,
+        grapher=grph_bundle,
+    )
+
+    pipeline = LongConspectWriterPipeline(session_config)
 
     if args.action == "global_clustering":
-        if args.global_plan_path is None:
-            logger.critical("Аргумент --global_plan_path не передан при запуске.")
-            return
-        if args.local_clusters_path is None:
-            logger.critical("Аргумент --local_clusters_path не передан при запуске.")
-            return
-
         global_plan_path = Path(args.global_plan_path)
         local_clusters_path = Path(args.local_clusters_path)
 
-        if not global_plan_path.is_file():
-            logger.critical(
-                f"Файла {global_plan_path.name} не существует. Указанный путь до файла: {global_plan_path}"
-            )
-            return
-
-        if not local_clusters_path.is_file():
-            logger.critical(
-                f"Файла {local_clusters_path.name} не существует. Указанный путь до файла: {local_clusters_path}"
-            )
-            return
-
         output_path = pipeline._call_global_clustering(
             global_plan_path, local_clusters_path
+        )
+
+    elif args.action == "add_graph_in_conspect":
+        conspect_md_path = Path(args.path_to_file)
+        graphs_path = Path(args.graphs_path)
+
+        output_path = pipeline.add_graph_in_conspect(
+            graphs_path=graphs_path, conspect_md_path=conspect_md_path
         )
 
     else:
@@ -206,6 +207,9 @@ def main() -> None:
 
         elif args.action == "convert_json_to_md":
             output_path = pipeline.convert_json_to_md(path_to_file)
+
+        elif args.action == "grapher":
+            output_path = pipeline._call_grapher(path_to_file)
 
     if output_path is not None:
         logger.info("Работа завершена.")

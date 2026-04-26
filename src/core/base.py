@@ -43,6 +43,15 @@ class Base(ABC):
     def run(self) -> str:
         pass
 
+    def _get_output_file_path(self, session_dir, stage, file_name):
+        actual_stage_path = session_dir / stage
+
+        actual_stage_path.mkdir(parents=True, exist_ok=True)
+
+        output_file_path = actual_stage_path / file_name
+
+        return output_file_path
+
     def _safe_result_out_line(
         self,
         output_dict: dict[str, Any] | str,
@@ -52,12 +61,9 @@ class Base(ABC):
         extension: str = "json",
         extension_file_writer: str = "w",
     ) -> Path:
-
-        actual_stage_path = session_dir / stage
-
-        actual_stage_path.mkdir(parents=True, exist_ok=True)
-
-        output_file_path = actual_stage_path / file_name
+        output_file_path = self._get_output_file_path(
+            session_dir=session_dir, stage=stage, file_name=file_name
+        )
 
         if extension == "json":
             with open(
@@ -171,10 +177,6 @@ class BaseLlamaCppAgent(BaseLLMAgent):
                 tokenizer(self.system_prompt.encode("utf-8"))
             )
             len_tokenizer_user_prompt = len(tokenizer(user_prompt.encode("utf-8")))
-            logger.debug(
-                f"Текущая длинна системного промпта: {len_tokenizer_system_prompt}"
-            )
-            logger.debug(f"Текущая длинна запроса: {len_tokenizer_user_prompt}")
             logger.debug(
                 f"Текущая длинна общая длинна контекста: {len_tokenizer_system_prompt + len_tokenizer_user_prompt}"
             )

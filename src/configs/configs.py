@@ -100,6 +100,7 @@ class PipelineSessionConfig:
     global_planner: AgentConfigBundle
     local_clusterizer: AgentConfigBundle
     global_clusterizer: AgentConfigBundle
+    grapher: AgentConfigBundle
 
 
 @dataclass

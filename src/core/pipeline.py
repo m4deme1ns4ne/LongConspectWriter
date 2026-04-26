@@ -1,10 +1,12 @@
-from os import PathLike
+import os
 from src.core.base import BasePipeline
 from src.core.utils import check_path_is
 from loguru import logger
 import multiprocessing
 from src.configs.configs import PipelineSessionConfig
 import json
+import shutil
+from pathlib import Path
 
 
 class LongConspectWriterPipeline(BasePipeline):
@@ -23,7 +25,7 @@ class LongConspectWriterPipeline(BasePipeline):
     #     return result_path
 
     def _run_stt_process(
-        self, path: str | PathLike, result_queue: multiprocessing.Queue
+        self, path: str | os.PathLike, result_queue: multiprocessing.Queue
     ) -> None:
         try:
             from src.core.stt import FasterWhisper
@@ -40,7 +42,7 @@ class LongConspectWriterPipeline(BasePipeline):
         except Exception as e:
             result_queue.put({"status": "error", "error": str(e)})
 
-    def _call_stt(self, path: str | PathLike) -> str:
+    def _call_stt(self, path: str | os.PathLike) -> str:
         """
         Запускает модель транскрибации (FasterWhisper).
         Вход (path): Путь к исходному аудио или видео файлу.
@@ -67,7 +69,7 @@ class LongConspectWriterPipeline(BasePipeline):
             )
 
     @check_path_is
-    def _call_local_clustering(self, path: str | PathLike) -> str | PathLike:
+    def _call_local_clustering(self, path: str | os.PathLike) -> str | os.PathLike:
         from src.core.clustering import SemanticLocalClusterizer
 
         model_local_clustering = SemanticLocalClusterizer(
@@ -79,7 +81,7 @@ class LongConspectWriterPipeline(BasePipeline):
         return new_path
 
     @check_path_is
-    def _call_local_planner(self, path: str | PathLike) -> str | PathLike:
+    def _call_local_planner(self, path: str | os.PathLike) -> str | os.PathLike:
         """
         Генерирует микро-темы для каждого абзаца на основе хронологических кластеров.
         Вход (path): Путь к локальным кластерам.
@@ -100,8 +102,8 @@ class LongConspectWriterPipeline(BasePipeline):
     @check_path_is
     def _call_global_planner(
         self,
-        path: str | PathLike,
-    ) -> str | PathLike:
+        path: str | os.PathLike,
+    ) -> str | os.PathLike:
         """
         Собирает микро-темы в финальное оглавление (LLM Reduce).
         Вход (path): Путь к списку микро-тем (результат LocalPlanner).
@@ -122,8 +124,8 @@ class LongConspectWriterPipeline(BasePipeline):
     @check_path_is
     def _call_planner(
         self,
-        path: str | PathLike,
-    ) -> str | PathLike:
+        path: str | os.PathLike,
+    ) -> str | os.PathLike:
         """
         Оркестратор планирования (Local -> Global).
         Вход (path): Путь к локальным кластерам (сырые абзацы).
@@ -137,9 +139,9 @@ class LongConspectWriterPipeline(BasePipeline):
     @check_path_is
     def _call_global_clustering(
         self,
-        global_plan_path: str | PathLike,
-        local_clusters_path: str | PathLike,
-    ) -> str | PathLike:
+        global_plan_path: str | os.PathLike,
+        local_clusters_path: str | os.PathLike,
+    ) -> str | os.PathLike:
         from src.core.clustering import SemanticGlobalClusterizer
 
         model_global_clustering = SemanticGlobalClusterizer(
@@ -152,8 +154,8 @@ class LongConspectWriterPipeline(BasePipeline):
     @check_path_is
     def _call_clustering(
         self,
-        path: str | PathLike,
-    ) -> str | PathLike:
+        path: str | os.PathLike,
+    ) -> str | os.PathLike:
         """
         Главный оркестратор всей логики кластеризации текста.
         Вход (path): Путь к сырой транскрипции (результат STT).
@@ -168,8 +170,8 @@ class LongConspectWriterPipeline(BasePipeline):
     @check_path_is
     def _call_synthesizer(
         self,
-        path: str | PathLike,
-    ) -> str | PathLike:
+        path: str | os.PathLike,
+    ) -> str | os.PathLike:
         """
         Запускает AgentSynthesizer для синтеза финального конспекта.
         Внутри себя он поднимет AgentExtractor для обновления контекста лекции.
@@ -219,7 +221,75 @@ class LongConspectWriterPipeline(BasePipeline):
 
         return out_filepath
 
-    def run(self, audio_file_path: str | PathLike) -> str | None:
+    @check_path_is
+    def _call_grapher(self, path: str | os.PathLike) -> str | os.PathLike:
+        """
+        Генерирует графики для конспекта.
+        """
+        from src.agents.agent_grapher import AgentGrapher
+
+        with AgentGrapher(
+            session_dir=self.actual_session_dir,
+            init_config=self.config.grapher.init_config,
+            gen_config=self.config.grapher.gen_config,
+            app_config=self.config.grapher.app_config,
+            lecture_theme=self.pipeline_config.lecture_theme,
+        ) as grapher:
+            new_path = grapher.run(path)
+            return new_path
+
+    def add_graph_in_conspect(
+        self, graphs_path: str | os.PathLike, conspect_md_path: str
+    ) -> str | os.PathLike:
+        graphs_file_path = Path(graphs_path)
+        with open(graphs_file_path, "r", encoding="utf-8") as file:
+            graphs = json.load(file)
+
+        with open(conspect_md_path, "r", encoding="utf-8") as file:
+            conspect = file.read()
+
+        stage_name = "09_conspect_with_graph_md"
+        final_md_dir = self.actual_session_dir / stage_name
+
+        # Создаем папку для картинок рядом с финальным конспектом в новой сессии
+        final_assets_dir = final_md_dir / "assets"
+        final_assets_dir.mkdir(parents=True, exist_ok=True)
+
+        # Вычисляем директорию, в которой лежит переданный JSON (старая сессия)
+        graphs_base_dir = graphs_file_path.parent
+
+        for place_holder, value in graphs.items():
+            if value["status"] == "success":
+                # Ищем картинку там же, где лежит JSON, а не в новой пустой сессии
+                absolute_image_path = graphs_base_dir / value["path"]
+
+                if absolute_image_path.exists():
+                    destination_path = final_assets_dir / absolute_image_path.name
+                    shutil.copy2(absolute_image_path, destination_path)
+
+                    markdown_valid_path = f"assets/{absolute_image_path.name}"
+                    replacement = f"![Сгенерированный график]({markdown_valid_path})"
+                else:
+                    logger.error(f"Файл не найден при сборке: {absolute_image_path}")
+                    replacement = (
+                        f"> ⚠️ *Ошибка сборки: файл {absolute_image_path.name} утерян*"
+                    )
+            else:
+                replacement = f"> ⚠️ *Ошибка генерации визуализации для: {place_holder}*"
+
+            conspect = conspect.replace(place_holder, replacement)
+
+        out_filepath = self._safe_result_out_line(
+            output_dict=conspect,
+            stage=stage_name,
+            file_name="final_conspect.md",
+            session_dir=self.actual_session_dir,
+            extension="md",
+        )
+
+        return out_filepath
+
+    def run(self, audio_file_path: str | os.PathLike) -> str | None:
         """
         Главный оркестратор полного пайплайна: аудио → конспект.
         Этапы: STT → локальная кластеризация → планирование →
@@ -231,8 +301,14 @@ class LongConspectWriterPipeline(BasePipeline):
 
         clustering_path = self._call_clustering(transcript_path)
 
-        conspect_path = self._call_synthesizer(clustering_path)
+        conspect_json = self._call_synthesizer(clustering_path)
 
-        final_conspect_path = self.convert_json_to_md(path=conspect_path)
+        conspect_md_path = self.convert_json_to_md(path=conspect_json)
 
-        return final_conspect_path
+        graphs_path = self._call_grapher(path=conspect_md_path)
+
+        conspect_with_graph = self.add_graph_in_conspect(
+            graphs_path=graphs_path, conspect_md_path=conspect_md_path
+        )
+
+        return conspect_with_graph
