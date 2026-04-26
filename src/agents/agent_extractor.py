@@ -20,7 +20,7 @@ class _AgentExtractor(BaseLlamaCppAgent):
             total=self._gen_config.max_tokens,
             desc="Экстракриция тем",
             unit="токен",
-            colour=ColoursForTqdm.first_level,
+            colour=ColoursForTqdm.second_level,
             leave=False,
             position=1,
             file=sys.stdout,
