@@ -52,11 +52,6 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
                 stream=True,
                 token_pbar=chunk_token_pbar,
             )
-        logger.debug(
-            f"Сгенерирован новый чанк конспекта, его длина: {
-                len(self.model.tokenize(response.encode('utf-8')))
-            }."
-        )
         return response
 
     def _generate_synthesizer(
@@ -70,7 +65,7 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
             shared_model=self.model,
             lecture_theme=self.lecture_theme,
         )
-        last_tail = "Это начало лекции."
+        last_tail = "[НАЧАЛО ДОКУМЕНТА, ПРОДОЛЖАЙ ТЕКСТ]"
         with tqdm(
             total=len(split_clusters),
             desc="Чанки",
