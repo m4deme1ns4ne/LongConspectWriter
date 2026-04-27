@@ -134,8 +134,8 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
         logger.info("Генерация финального конспекта завершена.")
 
         out_filepath = self._safe_result_out_line(
-            output_dict=conspect,
-            stage="06_synthesizer/",
+            output=conspect,
+            stage=self._app_config.name_stage_dir,
             file_name="conspect.json",
             session_dir=self.session_dir,
         )

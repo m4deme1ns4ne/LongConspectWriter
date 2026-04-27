@@ -45,8 +45,8 @@ class _AgentExtractor(BaseLlamaCppAgent):
             response_dict = {"extracted_entities": []}
 
         _ = self._safe_result_out_line(
-            output_dict=response_dict,
-            stage="05.5_extractor/",
+            output=response_dict,
+            stage=self._app_config.name_stage_dir,
             file_name="out_filepath.jsonl",
             session_dir=self.session_dir,
             extension_file_writer="a",

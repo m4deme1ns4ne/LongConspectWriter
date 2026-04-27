@@ -61,8 +61,8 @@ class AgentLocalPlanner(BaseLlamaCppAgent):
         full_local_plan = "\nЗаголовок: ".join(final_drafts)
         response_dict = {"answer_agent": full_local_plan}
         out_filepath = self._safe_result_out_line(
-            output_dict=response_dict,
-            stage="03_local_planners/",
+            output=response_dict,
+            stage=self._app_config.name_stage_dir,
             file_name="out_filepath.json",
             session_dir=self.session_dir,
         )
@@ -105,8 +105,8 @@ class AgentGlobalPlanner(BaseLlamaCppAgent):
         response_dict = ast.literal_eval(response)
 
         out_filepath = self._safe_result_out_line(
-            output_dict=response_dict,
-            stage="04_global_planners/",
+            output=response_dict,
+            stage=self._app_config.name_stage_dir,
             file_name="out_filepath.json",
             session_dir=self.session_dir,
         )

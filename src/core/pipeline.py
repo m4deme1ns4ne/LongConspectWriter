@@ -191,6 +191,25 @@ class LongConspectWriterPipeline(BasePipeline):
 
         return new_path
 
+    @check_path_is
+    def _call_graph_planner(
+        self,
+        path: str | os.PathLike,
+    ) -> str | os.PathLike:
+        """ """
+        from src.agents.agent_graph_planner import AgentGraphPlanner
+
+        with AgentGraphPlanner(
+            session_dir=self.actual_session_dir,
+            init_config=self.config.graph_planner.init_config,
+            gen_config=self.config.graph_planner.gen_config,
+            app_config=self.config.graph_planner.app_config,
+            lecture_theme=self.pipeline_config.lecture_theme,
+        ) as graph_planner:
+            new_path = graph_planner.run(path)
+            return new_path
+
+    # Добавить в utils или создать новую папку хз
     def convert_json_to_md(self, path):
         with open(path, "r", encoding="utf-8") as file:
             conspect = json.load(file)
@@ -201,8 +220,8 @@ class LongConspectWriterPipeline(BasePipeline):
             "**Пожалуйста, относитесь с понимаем и проверяйте конспект!**\n",
         ]
 
-        for topik, body in conspect.items():
-            md_lines.append(f"# {topik}\n")
+        for topic, body in conspect.items():
+            md_lines.append(f"# {topic}\n")
             if isinstance(body, list):
                 text_body = "\n\n".join(str(item) for item in body)
             else:
@@ -212,7 +231,7 @@ class LongConspectWriterPipeline(BasePipeline):
         final_conspect = "\n".join(md_lines)
 
         out_filepath = self._safe_result_out_line(
-            output_dict=final_conspect,
+            output=final_conspect,
             stage="07_conspect_md",
             file_name="conspect.md",
             session_dir=self.actual_session_dir,
@@ -238,6 +257,7 @@ class LongConspectWriterPipeline(BasePipeline):
             new_path = grapher.run(path)
             return new_path
 
+    # Добавить в utils или создать новую папку хз
     def add_graph_in_conspect(
         self, graphs_path: str | os.PathLike, conspect_md_path: str
     ) -> str | os.PathLike:
@@ -280,7 +300,7 @@ class LongConspectWriterPipeline(BasePipeline):
             conspect = conspect.replace(place_holder, replacement)
 
         out_filepath = self._safe_result_out_line(
-            output_dict=conspect,
+            output=conspect,
             stage=stage_name,
             file_name="final_conspect.md",
             session_dir=self.actual_session_dir,
@@ -303,7 +323,9 @@ class LongConspectWriterPipeline(BasePipeline):
 
         conspect_json = self._call_synthesizer(clustering_path)
 
-        conspect_md_path = self.convert_json_to_md(path=conspect_json)
+        conspect_md_path = self.convert_json_to_md(conspect_json)
+
+        conspect_md_path = self._call_graph_planner(conspect_md_path)
 
         graphs_path = self._call_grapher(path=conspect_md_path)
 

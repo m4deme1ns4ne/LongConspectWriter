@@ -63,7 +63,7 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
         visualizer.run(final_labels, metadata)
 
         out_filepath = self._safe_result_out_line(
-            output_dict=clusters,
+            output=clusters,
             stage="02_local_clusters/",
             file_name="out_filepath.json",
             session_dir=self.session_dir,
@@ -179,7 +179,7 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
         }
 
         out_filepath = self._safe_result_out_line(
-            output_dict=global_clusters,
+            output=global_clusters,
             stage="05_global_clusters/",
             file_name="out_filepath.json",
             session_dir=self.session_dir,

@@ -81,8 +81,8 @@ class FasterWhisper(BaseSTTAgent):
         full_text_dict = {"answer_agent": "\n".join(full_text_segments)}
 
         out_filepath = self._safe_result_out_line(
-            output_dict=full_text_dict,
-            stage="01_stt/",
+            output=full_text_dict,
+            stage=self._app_config.name_stage_dir,
             file_name="out_filepath.json",
             session_dir=self.session_dir,
         )

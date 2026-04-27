@@ -8,6 +8,8 @@ from razdel import sentenize
 import sys
 from dataclasses import dataclass
 from src.configs.configs import AgentConfigBundle
+from tenacity import stop_after_attempt, wait_fixed, retry
+from typing import Callable, Any
 
 
 class TextsSplitter:
@@ -48,6 +50,14 @@ class LoadPrompts:
     def load_prompts(file_path: str | PathLike) -> dict[str, dict[str, str]]:
         with open(file_path, "r", encoding="utf-8") as file:
             return yaml.safe_load(file)
+
+
+modify_retry = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(5),
+    before_sleep=log_retry_attempt,
+    reraise=True,
+)
 
 
 def log_execution_time(func):

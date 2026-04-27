@@ -80,7 +80,7 @@ class AgentGrapher(BaseLlamaCppAgent):
         # Аппаратная инъекция настроек кириллицы
         cyrillic_setup = (
             "import matplotlib.pyplot as plt\n"
-            "plt.rcParams['font.family'] = 'Arial'\n" # Или 'DejaVu Sans', если Arial нет в системе
+            "plt.rcParams['font.family'] = 'Arial'\n"  # Или 'DejaVu Sans', если Arial нет в системе
             "plt.rcParams['axes.unicode_minus'] = False\n\n"
         )
         python_script = cyrillic_setup + python_script
@@ -138,8 +138,8 @@ class AgentGrapher(BaseLlamaCppAgent):
             # Возвращаем пустой JSON
             return str(
                 self._safe_result_out_line(
-                    output_dict=graphs_mapping,
-                    stage="08_grapher/",
+                    output=graphs_mapping,
+                    stage=self._app_config.name_stage_dir,
                     file_name="graphs_mapping.json",
                     session_dir=self.session_dir,
                     extension="json",
@@ -161,7 +161,7 @@ class AgentGrapher(BaseLlamaCppAgent):
 
             target_image_path = self._get_output_file_path(
                 session_dir=self.session_dir,
-                stage="08_grapher/assets",
+                stage=self._app_config.name_stage_dir,
                 file_name=f"{i}_graph.png",
             )
 
@@ -185,8 +185,8 @@ class AgentGrapher(BaseLlamaCppAgent):
 
         # Возвращаем JSON с маппингом для пайплайна
         out_filepath = self._safe_result_out_line(
-            output_dict=graphs_mapping,
-            stage="08_grapher/",
+            output=graphs_mapping,
+            stage=self._app_config.name_stage_dir,
             file_name="graphs_mapping.json",
             session_dir=self.session_dir,
             extension="json",
