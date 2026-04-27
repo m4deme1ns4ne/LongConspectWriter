@@ -52,6 +52,7 @@ def main() -> None:
             "convert_json_to_md",
             "grapher",
             "add_graph_in_conspect",
+            "graph_planner",
         ],
         default="all",
         help="Тип операция с MAS",
@@ -75,16 +76,16 @@ def main() -> None:
         help="Путь к входному файлу для локальных кластеров",
     )
     parser.add_argument(
-        "--config_path",
-        type=str,
-        required=False,
-        help="Путь к конфигу",
-    )
-    parser.add_argument(
         "--graphs_path",
         type=str,
         required=False,
         help="Путь к JSON-файлу с путями сгенерированных графиков",
+    )
+    parser.add_argument(
+        "--continue_pipeline",
+        type=str,
+        required=False,
+        help="Продолжить пайплайн с выбранного action и до конца",
     )
     args = parser.parse_args()
 
@@ -144,6 +145,12 @@ def main() -> None:
         LLMGenConfig,
         LLMAppConfig,
     )
+    grph_pl_bundle = load_agent_bundle(
+        "src/configs/config-agents/graph_planner/config_graph_planner.yaml",
+        LLMInitConfig,
+        LLMGenConfig,
+        LLMAppConfig,
+    )
 
     session_config = PipelineSessionConfig(
         pipeline=pipeline_config,
@@ -155,6 +162,7 @@ def main() -> None:
         global_clusterizer=global_cluster_bundle,
         extractor=ex_bundle,
         grapher=grph_bundle,
+        graph_planner=grph_pl_bundle,
     )
 
     pipeline = LongConspectWriterPipeline(session_config)
@@ -210,6 +218,9 @@ def main() -> None:
 
         elif args.action == "grapher":
             output_path = pipeline._call_grapher(path_to_file)
+
+        elif args.action == "graph_planner":
+            output_path = pipeline._call_graph_planner(path_to_file)
 
     if output_path is not None:
         logger.info("Работа завершена.")
