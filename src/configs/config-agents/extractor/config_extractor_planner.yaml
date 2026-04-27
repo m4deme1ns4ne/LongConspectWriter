@@ -1,7 +1,8 @@
 # AgentExtractor
 
 init_config:
-  model_path: ".models/T-lite-it-2.1-Q5_K_M.gguf"
+  repo_id: "t-tech/T-lite-it-2.1-GGUF"
+  filename: "T-lite-it-2.1-Q5_K_M.gguf"
   n_gpu_layers: -1
   n_ctx: 8192
   verbose: false
@@ -17,3 +18,4 @@ app_config:
   agent_name: "extractor"
   prompt_path: "src/configs/config-agents/extractor/prompt_extractor.yaml"
   scheme_output_path: "src/configs/config-agents/extractor/agent_extractor_scheme_output.json"
+  name_stage_dir: "05.1_extractor/"

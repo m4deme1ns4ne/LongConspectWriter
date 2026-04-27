@@ -1,7 +1,8 @@
 # AgentGrapher
 
 init_config:
-  model_path: ".models/qwen2.5-coder-7b-instruct-q6_k.gguf"
+  repo_id: "Qwen/Qwen2.5-Coder-7B-Instruct-GGUF"
+  filename: "qwen2.5-coder-7b-instruct-q6_k.gguf"
   n_gpu_layers: -1
   n_ctx: 4096
   verbose: false
@@ -16,3 +17,4 @@ gen_config:
 app_config:
   agent_name: "grapher"
   prompt_path: "src/configs/config-agents/grapher/prompt_grapher.yaml"
+  name_stage_dir: "08_grapher/"

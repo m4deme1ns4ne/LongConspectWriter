@@ -1,7 +1,8 @@
 # AgentLocalPlanner
 
 init_config:
-  model_path: ".models/T-lite-it-2.1-Q5_K_M.gguf"
+  repo_id: "t-tech/T-lite-it-2.1-GGUF"
+  filename: "T-lite-it-2.1-Q5_K_M.gguf"
   n_gpu_layers: -1
   n_ctx: 8192
   verbose: false
@@ -16,3 +17,4 @@ gen_config:
 app_config:
   agent_name: "local_planner"
   prompt_path: "src/configs/config-agents/local_planner/prompt_local_planner.yaml"
+  name_stage_dir: "03_local_planners/"

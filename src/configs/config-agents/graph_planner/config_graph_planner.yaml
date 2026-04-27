@@ -1,18 +1,21 @@
 # AgentGraphPlanner
 
 init_config:
-  model_path: ".models/qwen2.5-coder-7b-instruct-q6_k.gguf"
+  repo_id: "t-tech/T-lite-it-2.1-GGUF"
+  filename: "T-lite-it-2.1-Q5_K_M.gguf"
   n_gpu_layers: -1
   n_ctx: 4096
   verbose: false
 
 gen_config:
-  max_tokens: 1024
-  repeat_penalty: 1.05
-  temperature: 0
+  max_tokens: 2048
+  repeat_penalty: 1.1
+  temperature: 0.1
   presence_penalty: 0.0
   min_p: 0.15
 
 app_config:
-  agent_name: "grapher"
-  prompt_path: "src/configs/config-agents/grapher/prompt_graph_planner.yaml"
+  agent_name: "graph_planner"
+  prompt_path: "src/configs/config-agents/graph_planner/prompt_graph_planner.yaml"
+  name_stage_dir: "07_graph_planner/"
+  scheme_output_path: "src/configs/config-agents/graph_planner/agent_grapher_planner_scheme_output.json"

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from loguru import logger
 from src.core.vram_manager import VRamCleaner
-from src.core.utils import log_execution_time, LoadPrompts, log_retry_attempt
+from src.core.utils import log_execution_time, LoadPrompts, modify_retry
 from src.configs.configs import (
     LLMInitConfig,
     LLMGenConfig,
@@ -11,7 +11,6 @@ from src.configs.configs import (
     GlobalClusterizerInitConfig,
 )
 from dataclasses import asdict
-from tenacity import retry, stop_after_attempt, wait_fixed
 from typing import Any
 from llama_cpp import Llama
 from src.configs.configs import AppSTTConfig, STTGenConfig, STTInitConfig
@@ -21,6 +20,7 @@ from pathlib import Path
 from datetime import datetime
 import matplotlib.pyplot as plt
 import time
+from dataclasses import asdict
 
 
 class Trackable:
@@ -54,7 +54,7 @@ class Base(ABC):
 
     def _safe_result_out_line(
         self,
-        output_dict: dict[str, Any] | str,
+        output: dict[str, Any] | str,
         stage: str,
         file_name: str,
         session_dir: Path,
@@ -69,10 +69,14 @@ class Base(ABC):
             with open(
                 output_file_path, extension_file_writer, encoding="utf-8"
             ) as file:
-                json.dump(output_dict, file, ensure_ascii=False, indent=4)
+                json.dump(output, file, ensure_ascii=False, indent=4)
         elif extension == "md":
             with open(output_file_path, extension_file_writer, encoding="utf-8") as f:
-                f.write(str(output_dict))
+                f.write(str(output))
+        else:
+            logger.critical(
+                f"Работа агента {self.__class__.__name__} не сохранена в файл по пути: {output_file_path}. Расширения {extension} нету в функции {self.__qualname__}"
+            )
         logger.success(
             f"Работа агента {self.__class__.__name__} сохранена в файл по пути: {output_file_path}"
         )
@@ -126,21 +130,43 @@ class BaseLlamaCppAgent(BaseLLMAgent):
         self._init_config = init_config
         self._gen_config = gen_config
         self._app_config = app_config
+        self.model_display_name = (
+            self._init_config.model_path
+            if self._init_config.model_path
+            else f"{self._init_config.repo_id}/{self._init_config.filename}"
+        )
         logger.info(
-            f"Инициализация {self.__class__.__name__} (Модель: {self._init_config.model_path})"
+            f"Инициализация {self.__class__.__name__} (Модель: {self.model_display_name})"
         )
 
         if shared_model:
             self.model = shared_model
             self._owns_model = False
             logger.warning(
-                f"Модель {self._init_config.model_path} уже была загружена в память."
+                f"Модель {self.model_display_name} уже была загружена в память."
             )
         else:
-            logger.info(f"Загрузка {self._init_config.model_path} в память...")
-            self.model = Llama(**asdict(self._init_config))
+            init_kwargs = asdict(self._init_config)
+
+            repo_id = init_kwargs.pop("repo_id", None)
+            filename = init_kwargs.pop("filename", None)
+            model_path = init_kwargs.pop("model_path")
+            path_to_load_models = init_kwargs.pop("path_to_load_models", None)
+
+            if repo_id and filename:
+                logger.info(f"Загрузка модели с HuggingFace: {repo_id}/{filename}")
+                self.model = Llama.from_pretrained(
+                    repo_id=repo_id,
+                    filename=filename,
+                    local_dir=str(path_to_load_models),
+                    **init_kwargs,
+                )
+            else:
+                logger.info(f"Загрузка локальной модели по пути: {model_path}")
+                self.model = Llama(model_path=model_path, **init_kwargs)
+
             self._owns_model = True
-            logger.info(f"Модель {self._init_config.model_path} загружена.")
+            logger.info(f"Модель {self.model_display_name} загружена.")
 
         self.prompts = LoadPrompts.load_prompts(self._app_config.prompt_path)
         try:
@@ -180,17 +206,15 @@ class BaseLlamaCppAgent(BaseLLMAgent):
             logger.debug(
                 f"Текущая длинна общая длинна контекста: {len_tokenizer_system_prompt + len_tokenizer_user_prompt}"
             )
+        return self._format_output(user_prompt)
+
+    def _format_output(self, user_prompt):
         return [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": user_prompt},
         ]
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_fixed(5),
-        before_sleep=log_retry_attempt,
-        reraise=True,
-    )
+    @modify_retry
     def _generate(
         self,
         prompt: list[dict[str, str]],

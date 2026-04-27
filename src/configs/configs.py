@@ -2,6 +2,8 @@ from dataclasses import dataclass
 import torch
 import os
 from typing import Any
+from pathlib import Path
+from loguru import logger
 
 
 @dataclass
@@ -44,14 +46,32 @@ class STTGenConfig:
 class AppSTTConfig:
     agent_name: str
     prompt_path: str | os.PathLike
+    name_stage_dir: str
 
 
 @dataclass
 class LLMInitConfig:
-    model_path: str
+    model_path: str | None = None
     n_gpu_layers: int = -1
     n_ctx: int = 8192
     verbose: bool = False
+    repo_id: str | None = None
+    filename: str | None = None
+    path_to_load_models: Path = Path(".models/")
+
+    def __post_init__(self) -> None:
+        if not self.path_to_load_models.exists():
+            self.path_to_load_models.mkdir(parents=True, exist_ok=True)
+            logger.warning(
+                f"Папка {self.path_to_load_models} не была найдена. Поэтому она была создана автоматически."
+            )
+
+        if not (self.model_path or (self.repo_id and self.filename)):
+            error_msg = (
+                "Ошибка! Ни model_path, ни связка repo_id + filename не переданы."
+            )
+            logger.critical(error_msg)
+            raise ValueError(error_msg)
 
 
 @dataclass
@@ -69,6 +89,7 @@ class LLMGenConfig:
 class LLMAppConfig:
     agent_name: str
     prompt_path: str | os.PathLike
+    name_stage_dir: str
     chunk_size_ratio: float | None = None
     chunk_overlap_ratio: float | None = None
     last_tail_words_count: int = None
@@ -101,6 +122,7 @@ class PipelineSessionConfig:
     local_clusterizer: AgentConfigBundle
     global_clusterizer: AgentConfigBundle
     grapher: AgentConfigBundle
+    graph_planner: AgentConfigBundle
 
 
 @dataclass
