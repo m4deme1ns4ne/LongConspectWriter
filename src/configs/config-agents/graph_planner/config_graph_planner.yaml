@@ -10,12 +10,13 @@ init_config:
 gen_config:
   max_tokens: 2048
   repeat_penalty: 1.1
-  temperature: 0.1
+  temperature: 0
   presence_penalty: 0.0
   min_p: 0.15
 
 app_config:
   agent_name: "graph_planner"
   prompt_path: "src/configs/config-agents/graph_planner/prompt_graph_planner.yaml"
-  name_stage_dir: "07_graph_planner/"
+  name_stage_dir: "08_graph_planner/"
   scheme_output_path: "src/configs/config-agents/graph_planner/agent_grapher_planner_scheme_output.json"
+  available_lib: "matplotlib, numpy, math, networkx, pandas, seaborn, plotly" # Потом добавить в pipeline config

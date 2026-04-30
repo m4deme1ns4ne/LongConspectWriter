@@ -36,15 +36,77 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
         ) as pbar:
             response = self._generate(
                 prompt=self._build_prompt(
-                    text=conspect_chunk, conspect_theme=conspect_theme
+                    text=conspect_chunk,
+                    conspect_theme=conspect_theme,
+                    available_lib=self._app_config.available_lib,
                 ),
                 stream=True,
                 token_pbar=pbar,
                 response_format=self.response_format,
             )
-        with open(path_with_output, "w", encoding="utf-8") as f:
+        with open(path_with_output, "a", encoding="utf-8") as f:
             f.write(response)
         return json.loads(response)
+
+    def normalizing_text(self, text: str):
+        junk_chars = set(" \t\n\r\\{}_^$.,:;-—()[]")
+        chars = []
+        index_map = []
+        for i, char in enumerate(text):
+            if char.isspace() or char in junk_chars:
+                continue
+            chars.append(char.lower())
+            index_map.append(i)
+        return "".join(chars), index_map
+
+    def _apply_graphs_to_markdown(
+        self, conspect_md: str, analysis_results: list
+    ) -> str:
+        for analys in analysis_results:
+            for item in analys.get("analysis", []):
+                if str(item.get("decision")).lower() == "true":
+                    quote = item["quote"].strip()
+                    if len(quote) < 20:
+                        logger.warning(f"Слишком короткая цитата, пропускаем: {quote}")
+                        continue
+                    graph_type = item.get("type", "Визуализация")
+                    title = item.get("title", "График")
+                    mock_data = item.get("mock_data", "")
+                    task = item.get("task", "")
+
+                    tag = f"[GRAPH_TYPE: {graph_type} | GRAPH_TITLE: {title} | MOCK_DATA: {mock_data} | TASK: {task}]"
+
+                    normalized_conspect_md, real_imap = self.normalizing_text(
+                        conspect_md
+                    )
+                    normalized_quote, _ = self.normalizing_text(quote)
+
+                    matcher = difflib.SequenceMatcher(
+                        None, normalized_conspect_md, normalized_quote, autojunk=False
+                    )
+                    match = matcher.find_longest_match(
+                        0, len(normalized_conspect_md), 0, len(normalized_quote)
+                    )
+
+                    min_match_len = min(
+                        40, len(normalized_quote) * 0.7
+                    )  # Потом убрать и добавить в конфиг
+
+                    if match.size >= min_match_len:
+                        last_norm_idx = match.a + match.size - 1
+                        last_real_idx = real_imap[last_norm_idx]
+                        insert_idx = last_real_idx + 1
+
+                        conspect_md = (
+                            conspect_md[:insert_idx]
+                            + f"\n\n{tag}\n\n"
+                            + conspect_md[insert_idx:]
+                        )
+                    else:
+                        logger.warning(
+                            f"Цитата не найдена в конспекте (difflib). Максимальное непрерывное совпадение: {match.size}, требуется минимум: {int(min_match_len)}. Текст: {quote}"
+                        )
+        return conspect_md
 
     def run(self, conspect_md_path: str, conspect_theme: str = None) -> str:
         with open(conspect_md_path, "r", encoding="utf-8") as file:
@@ -52,7 +114,9 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
         conspect_chunks = TextsSplitter.split_text_to_tokens(
             text=conspect_md,
             tokenizer=self.model.tokenize,
-            chunk_size=int(self._gen_config.max_tokens * 0.5),
+            chunk_size=int(
+                self._gen_config.max_tokens * 0.5
+            ),  # Потом убрать и добавить в конфиг
             chunk_overlap=int(self._gen_config.max_tokens * 0.2),
         )
         analysis_results = []
@@ -66,11 +130,11 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
             file=sys.stdout,
             dynamic_ncols=True,
         ) as pbar:
-            for i, chunk in enumerate(conspect_chunks):
+            for chunk in conspect_chunks:
                 path_with_output = self._get_output_file_path(
                     session_dir=self.session_dir,
                     stage=self._app_config.name_stage_dir,
-                    file_name=f"{i}_script.jsonl",
+                    file_name=f"out_filepath.jsonl",
                 )
                 try:
                     response_dict = self.create_graph_place_holder(
@@ -89,44 +153,14 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
         total_graphs = 0
         for analys in analysis_results:
             for item in analys.get("analysis", []):
-                if str(item.get("decision")).lower() == "true" and item.get(
-                    "placeholder"
-                ):
+                if str(item.get("decision")).lower() == "true":
                     total_graphs += 1
 
         logger.debug(f"Найдено плейсхолдеров для графиков: {total_graphs}")
 
-        for analys in analysis_results:
-            for item in analys.get("analysis", []):
-                if str(item.get("decision")).lower() == "true" and item.get(
-                    "placeholder"
-                ):
-                    quote = item["quote"].strip()
-                    tag = item["placeholder"]
-
-                    if len(quote) < 20:
-                        logger.warning(f"Слишком короткая цитата, пропускаем: {quote}")
-                        continue
-
-                    matcher = difflib.SequenceMatcher(None, quote, conspect_md)
-                    match = matcher.find_longest_match(
-                        0, len(quote), 0, len(conspect_md)
-                    )
-
-                    min_match_len = min(40, len(quote) * 0.7)
-
-                    if match.size >= min_match_len:
-                        insert_index = match.b + match.size
-
-                        conspect_md = (
-                            conspect_md[:insert_index]
-                            + f"\n\n{tag}"
-                            + conspect_md[insert_index:]
-                        )
-                    else:
-                        logger.warning(
-                            f"Цитата не найдена в конспекте (difflib). Максимальное непрерывное совпадение: {match.size}, требуется минимум: {int(min_match_len)}. Текст: {quote}"
-                        )
+        conspect_md = self._apply_graphs_to_markdown(
+            conspect_md=conspect_md, analysis_results=analysis_results
+        )
 
         out_filepath = self._safe_result_out_line(
             output=conspect_md,

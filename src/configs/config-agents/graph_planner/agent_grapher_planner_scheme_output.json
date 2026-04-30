@@ -1,13 +1,21 @@
 {
-  "thought_process": "Сначала проанализируй текст здесь. Пройдись по алгоритму: есть ли триггеры? Есть ли запрещенная статика или базовая арифметика? Можно ли это запрограммировать?",
-  "analysis": [
-    {
-      "quote": "ТОЧНАЯ ЦИТАТА ИЗ ТЕКСТА (Copy-Paste символ в символ).",
-      "trigger_type": "Динамика, Геометрия или Топология",
-      "pedagogical_value": "Зачем этот график студенту?",
-      "math_translation": "Математическая модель для программиста.",
-      "decision": true,
-      "placeholder": "[GRAPH: тип | Точное ТЗ]"
+  "type": "object",
+  "properties": {
+    "analysis": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "decision": { "type": "boolean" },
+          "quote": { "type": "string" },
+          "type": { "type": "string" },
+          "title": { "type": "string" },
+          "task": { "type": "string" },
+          "mock_data": { "type": "string" }
+        },
+        "required": ["decision", "quote", "type", "title", "task", "mock_data"]
+      }
     }
-  ]
+  },
+  "required": ["analysis"]
 }
