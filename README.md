@@ -1,4 +1,4 @@
-# LongConspectWriter: Local Multi-Agent System For Generating Long Academic Conspect
+# LongConspectWriter: A Pipeline for Summarizing 10,000+ Lecture Tokens Powered by Local 8B LLMs
 
 README.md in English | [README.ru.md in Russian](README.ru.md)
 
