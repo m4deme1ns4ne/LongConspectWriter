@@ -227,4 +227,4 @@ Additional dataclass configuration descriptions are located in `src/configs/conf
 
 Examples of conspects generated with LongConspectWriter are located in the [examples](examples) directory.
 
-Current filled examples are located in [examples/v1.5](examples/v1.5).
+Current filled examples are located in [examples/v2.0](examples/v2.0).

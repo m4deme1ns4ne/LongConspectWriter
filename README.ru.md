@@ -227,4 +227,4 @@ data/runs/YYYY.MM.DD/HH.MM.SS/
 
 Примеры конспектов, сгенерированных с помощью LongConspectWriter, находятся в папке [examples](examples).
 
-Актуальные заполненные примеры находятся в папке [examples/v1.5](examples/v1.5).
+Актуальные заполненные примеры находятся в папке [examples/v2.0](examples/v2.0).
