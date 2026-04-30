@@ -16,7 +16,7 @@
 
 LongConspectWriter превращает аудио или видео лекции в Markdown-конспект. Пайплайн транскрибирует запись через FasterWhisper, строит локальные семантические кластеры, собирает глобальный план лекции, привязывает фрагменты транскрипта к главам и синтезирует академический JSON-конспект. Во время синтеза внутренний `AgentExtractor` обновляет контекст лекции, чтобы следующие чанки не дублировали уже извлеченные сущности и темы.
 
-После синтеза JSON конвертируется в Markdown. Отдельный `AgentGraphPlanner` анализирует готовый Markdown и вставляет `[GRAPH: ...]`-плейсхолдеры только там, где визуализация полезна и может быть сгенерирована кодом. Затем `AgentGrapher` находит эти плейсхолдеры, генерирует Python-скрипты для matplotlib/networkx, рендерит изображения и собирает финальный Markdown с локальными ссылками на assets.
+После синтеза JSON конвертируется в Markdown. Отдельный `AgentGraphPlanner` анализирует готовый Markdown и вставляет `[GRAPH_TYPE: ...]`-плейсхолдеры там, где визуализация полезна и может быть сгенерирована кодом. Затем `AgentGrapher` находит эти плейсхолдеры, генерирует Python-скрипты для визуализаций, рендерит изображения с ретраями при ошибках и сохраняет mapping графиков. Финальный этап `add_graph_in_conspect` заменяет плейсхолдеры HTML-блоками с локальными изображениями из `assets/`.
 
 ```mermaid
 flowchart TD
@@ -43,7 +43,7 @@ flowchart TD
     DraftMD --> GraphPlanner["AgentGraphPlanner<br/>(Index Mapping и разметка тегами)"]
     GraphPlanner --> TaggedMD["Размеченный конспект<br/>(MD с плейсхолдерами)"]
     
-    TaggedMD --> Grapher["AgentGrapher<br/>(Генерация и выполнение Python-кода)"]
+    TaggedMD --> Grapher["AgentGrapher<br/>(Генерация кода + ретраи + render)"]
     
     Grapher --> GraphMap["Маппинг графиков<br/>(Статусы генерации в JSON)"]
     Grapher --> Images["Сгенерированные изображения<br/>(PNG)"]
@@ -67,8 +67,9 @@ flowchart TD
 | `SemanticGlobalClusterizer` | Привязывает локальные кластеры к главам глобального плана. |
 | `AgentSynthesizerLlama` | Генерирует академический JSON-конспект и использует extractor для контекста. |
 | `AgentExtractor` | Извлекает сущности из текущего чанка синтеза для дедупликации следующих чанков. |
-| `AgentGraphPlanner` | Анализирует готовый Markdown и вставляет `[GRAPH: ...]`-плейсхолдеры. |
-| `AgentGrapher` | Генерирует Python-код визуализации, запускает его через `MPLBACKEND=Agg` и сохраняет mapping графиков. |
+| `AgentGraphPlanner` | Анализирует готовый Markdown и вставляет `[GRAPH_TYPE: ...]`-плейсхолдеры по цитатам через нормализованный поиск. |
+| `AgentGrapher` | Генерирует Python-код визуализации, запускает его через `MPLBACKEND=Agg`, делает ретраи с повышением температуры и сохраняет mapping графиков. |
+| `add_graph_in_conspect` | Копирует успешные PNG в финальные `assets/` и заменяет плейсхолдеры HTML-блоками с изображениями. |
 
 ## Установка и запуск
 
@@ -118,8 +119,8 @@ uv run python __main__.py --action clustering --path_to_file "data/example-trans
 uv run python __main__.py --action synthesizer --path_to_file "data/example-clusters/example-global-clusters/your_global_clusters.json"
 uv run python __main__.py --action convert_json_to_md --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/06_synthesizer/conspect.json"
 uv run python __main__.py --action graph_planner --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/07_conspect_md/conspect.md"
-uv run python __main__.py --action grapher --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/07_graph_planner/out_filepath.md"
-uv run python __main__.py --action add_graph_in_conspect --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/07_graph_planner/out_filepath.md" --graphs_path "data/runs/YYYY.MM.DD/HH.MM.SS/08_grapher/graphs_mapping.json"
+uv run python __main__.py --action grapher --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/08_graph_planner/out_filepath.md"
+uv run python __main__.py --action add_graph_in_conspect --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/08_graph_planner/out_filepath.md" --graphs_path "data/runs/YYYY.MM.DD/HH.MM.SS/09_grapher/graphs_mapping.json"
 ```
 
 Каждый запуск CLI создает новую сессионную директорию внутри `data/runs/<date>/<time>/`. Если вы запускаете стадии вручную, передавайте пути к артефактам из нужной сессии явно.
@@ -140,9 +141,9 @@ uv run python __main__.py --action add_graph_in_conspect --path_to_file "data/ru
 | `clustering` | Транскрипт STT | Глобальные кластеры через `local_clustering -> planner -> global_clustering` |
 | `synthesizer` | Глобальные кластеры | `06_synthesizer/conspect.json` |
 | `convert_json_to_md` | JSON-конспект | `07_conspect_md/conspect.md` |
-| `graph_planner` | Markdown-конспект | `07_graph_planner/out_filepath.md` с добавленными `[GRAPH: ...]` |
-| `grapher` | Markdown с `[GRAPH: ...]` | `08_grapher/graphs_mapping.json`, Python-скрипты и PNG-графики |
-| `add_graph_in_conspect` | Markdown с `[GRAPH: ...]` + `graphs_mapping.json` | `09_conspect_with_graph_md/final_conspect.md` |
+| `graph_planner` | Markdown-конспект | `08_graph_planner/out_filepath.md` с добавленными `[GRAPH_TYPE: ...]` и `08_graph_planner/out_filepath.jsonl` |
+| `grapher` | Markdown с `[GRAPH_TYPE: ...]` | `09_grapher/graphs_mapping.json`, `09_grapher/scripts/*.py`, `09_grapher/assets/*.png` |
+| `add_graph_in_conspect` | Markdown с `[GRAPH_TYPE: ...]` + `graphs_mapping.json` | `10_conspect_with_graph_md/final_conspect.md` |
 
 ## Выходные артефакты
 
@@ -162,11 +163,12 @@ data/runs/YYYY.MM.DD/HH.MM.SS/
 - `05.1_extractor/` - JSONL-вывод внутреннего extractor во время синтеза.
 - `06_synthesizer/` - JSON-конспект.
 - `07_conspect_md/` - Markdown-конспект без финальной подстановки графиков.
-- `07_graph_planner/` - Markdown после вставки `[GRAPH: ...]` и JSONL-ответы graph planner по чанкам.
-- `08_grapher/` - `graphs_mapping.json` и сгенерированные графики.
-- `08_grapher/scripts/` - Python-скрипты, которыми рендерились графики.
-- `09_conspect_with_graph_md/` - финальный Markdown-конспект.
-- `09_conspect_with_graph_md/assets/` - локальные изображения, скопированные для финального Markdown.
+- `08_graph_planner/` - Markdown после вставки `[GRAPH_TYPE: ...]` и JSONL-ответы graph planner по чанкам.
+- `09_grapher/` - `graphs_mapping.json` и сгенерированные графики.
+- `09_grapher/assets/` - PNG-графики, созданные `AgentGrapher`.
+- `09_grapher/scripts/` - Python-скрипты, которыми рендерились графики.
+- `10_conspect_with_graph_md/` - финальный Markdown-конспект.
+- `10_conspect_with_graph_md/assets/` - локальные изображения, скопированные для финального Markdown.
 
 ## Конфигурация
 
@@ -186,7 +188,7 @@ data/runs/YYYY.MM.DD/HH.MM.SS/
 | STT | `large-v3-turbo` |
 | Local/Global Planner LLM | `t-tech/T-lite-it-2.1-GGUF`, `T-lite-it-2.1-Q5_K_M.gguf` |
 | Synthesizer LLM | `t-tech/T-lite-it-2.1-GGUF`, `T-lite-it-2.1-Q5_K_M.gguf` |
-| Extractor LLM | `t-tech/T-lite-it-2.1-GGUF`, `T-lite-it-2.1-Q5_K_M.gguf` |
+| Extractor LLM | Использует ту же загруженную модель, что и synthesizer |
 | Graph Planner LLM | `t-tech/T-lite-it-2.1-GGUF`, `T-lite-it-2.1-Q5_K_M.gguf` |
 | Grapher LLM | `Qwen/Qwen2.5-Coder-7B-Instruct-GGUF`, `qwen2.5-coder-7b-instruct-q6_k.gguf` |
 | Local embeddings | `cointegrated/rubert-tiny2` |
@@ -206,6 +208,15 @@ data/runs/YYYY.MM.DD/HH.MM.SS/
 | Local Clusterizer | `src/configs/config-clusterizer/config_local_clusterizer.yaml` | - |
 | Global Clusterizer | `src/configs/config-clusterizer/config_global_clusterizer.yaml` | - |
 
+Дополнительные параметры визуализатора:
+
+| Component | Config key | Meaning |
+| --- | --- | --- |
+| `AgentGraphPlanner` | `available_lib` | Список библиотек, которые graph planner учитывает при составлении ТЗ для графика. |
+| `AgentGrapher` | `available_lib` | Список библиотек, доступных LLM-кодеру при генерации Python-скрипта. |
+| `AgentGrapher` | `re_try_count` | Количество попыток генерации и исполнения кода. Сейчас `3`. |
+| `AgentGrapher` | `step_temperature` | Шаг повышения температуры между ретраями. Сейчас `0.1`. |
+
 Дополнительные dataclass-описания конфигураций находятся в `src/configs/configs.py`.
 
 ## Evaluation
@@ -216,4 +227,4 @@ data/runs/YYYY.MM.DD/HH.MM.SS/
 
 Примеры конспектов, сгенерированных с помощью LongConspectWriter, находятся в папке [examples](examples).
 
-Актуальные примеры находятся в папке [examples/v1.5](examples/v1.5).
+Актуальные заполненные примеры находятся в папке [examples/v1.5](examples/v1.5).

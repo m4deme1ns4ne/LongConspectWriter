@@ -1,4 +1,4 @@
-# LongConspectWriter: A Pipeline for Summarizing 10,000+ Lecture Tokens Powered by Local 8B LLMs
+# LongConspectWriter: A Pipeline for Summarizing 10,000+ Lecture Tokens with Local 8B LLMs
 
 README.md in English | [README.ru.md in Russian](README.ru.md)
 
@@ -14,29 +14,46 @@ README.md in English | [README.ru.md in Russian](README.ru.md)
 
 ## System Architecture
 
-LongConspectWriter turns audio or video lectures into Markdown conspects. The pipeline transcribes the recording with FasterWhisper, builds local semantic clusters, creates a global lecture outline, assigns transcript fragments to chapters, and synthesizes an academic JSON conspect. During synthesis, the internal `AgentExtractor` updates the lecture context so that later chunks do not duplicate entities and topics that have already been extracted.
+LongConspectWriter turns audio or video lectures into a Markdown conspect. The pipeline transcribes the recording with FasterWhisper, builds local semantic clusters, creates a global lecture outline, assigns transcript fragments to chapters, and synthesizes an academic JSON conspect. During synthesis, the internal `AgentExtractor` updates the lecture context so that later chunks do not duplicate entities and topics that have already been extracted.
 
-After synthesis, the JSON is converted to Markdown. A separate `AgentGraphPlanner` analyzes the finished Markdown and inserts `[GRAPH: ...]` placeholders only where visualization is useful and can be generated with code. Then `AgentGrapher` finds these placeholders, generates Python scripts for matplotlib/networkx, renders images, and assembles the final Markdown with local asset links.
+After synthesis, the JSON is converted to Markdown. A separate `AgentGraphPlanner` analyzes the finished Markdown and inserts `[GRAPH_TYPE: ...]` placeholders where a visualization is useful and can be generated with code. Then `AgentGrapher` finds these placeholders, generates Python scripts for visualizations, renders images with retries on errors, and saves the graph mapping. The final `add_graph_in_conspect` stage replaces placeholders with HTML blocks that point to local images from `assets/`.
 
 ```mermaid
 flowchart TD
-    Audio["Audio / Video"] --> STT["STT<br/>(FasterWhisper)"]
+    %% Input data
+    Audio["Audio / Video"] --> STT["STT Engine<br/>(FasterWhisper)"]
 
-    STT --> LCluster["Local Clustering<br/>(semantic chunks)"]
-    LCluster --> LPlanner["AgentLocalPlanner<br/>(local topics)"]
-    LPlanner --> GPlanner["AgentGlobalPlanner<br/>(chapter outline)"]
+    %% Clustering and planning
+    STT --> LCluster["Local Clustering<br/>(Semantic chunks)"]
+    LCluster --> LPlanner["AgentLocalPlanner<br/>(Local topic generation)"]
+    LPlanner --> GPlanner["AgentGlobalPlanner<br/>(Conspect chapter structure)"]
 
-    LCluster & GPlanner --> GCluster["Global Clustering<br/>(chunks aligned to chapters)"]
-    GCluster --> Synthesizer["AgentSynthesizerLlama<br/>(JSON conspect)"]
-    Synthesizer <--> Extractor["Internal AgentExtractor<br/>(context update)"]
+    LCluster --> GCluster["Global Clustering<br/>(Chunk-to-chapter assignment)"]
+    GPlanner --> GCluster
 
-    Synthesizer --> JSON["06_synthesizer/conspect.json"]
-    JSON --> MD["07_conspect_md/conspect.md"]
-    MD --> GraphPlanner["AgentGraphPlanner<br/>(insert [GRAPH: ...] tags)"]
-    GraphPlanner --> GraphMD["07_graph_planner/out_filepath.md"]
-    GraphMD --> Grapher["AgentGrapher<br/>(code generation + render)"]
-    Grapher --> GraphMap["08_grapher/graphs_mapping.json<br/>08_grapher/scripts/*.py"]
-    GraphMD & GraphMap --> FinalMD["09_conspect_with_graph_md/final_conspect.md"]
+    %% Text synthesis
+    GCluster --> Synthesizer["AgentSynthesizer<br/>(Conspect text generation)"]
+    Synthesizer <--> Extractor["AgentExtractor<br/>(Context / memory update)"]
+
+    Synthesizer --> DraftJSON["Draft conspect<br/>(JSON)"]
+    DraftJSON --> Converter["JSON -> MD converter"]
+    Converter --> DraftMD["Draft conspect<br/>(Markdown)"]
+
+    %% Multi-agent visualizer
+    DraftMD --> GraphPlanner["AgentGraphPlanner<br/>(Index Mapping and tag insertion)"]
+    GraphPlanner --> TaggedMD["Tagged conspect<br/>(MD with placeholders)"]
+
+    TaggedMD --> Grapher["AgentGrapher<br/>(Code generation + retries + render)"]
+
+    Grapher --> GraphMap["Graph mapping<br/>(Generation statuses in JSON)"]
+    Grapher --> Images["Generated images<br/>(PNG)"]
+
+    %% Final assembly
+    TaggedMD --> Stitcher["Conspect assembler<br/>(HTML tag insertion)"]
+    GraphMap --> Stitcher
+    Images -.-> Stitcher
+
+    Stitcher --> FinalMD["Final conspect<br/>(Ready Markdown)"]
 ```
 
 ### Main Agents and Components
@@ -50,8 +67,9 @@ flowchart TD
 | `SemanticGlobalClusterizer` | Assigns local clusters to chapters from the global outline. |
 | `AgentSynthesizerLlama` | Generates an academic JSON conspect and uses the extractor for context. |
 | `AgentExtractor` | Extracts entities from the current synthesis chunk to deduplicate later chunks. |
-| `AgentGraphPlanner` | Analyzes the finished Markdown and inserts `[GRAPH: ...]` placeholders. |
-| `AgentGrapher` | Generates Python visualization code, runs it with `MPLBACKEND=Agg`, and saves the graph mapping. |
+| `AgentGraphPlanner` | Analyzes the finished Markdown and inserts `[GRAPH_TYPE: ...]` placeholders by matching normalized quotes. |
+| `AgentGrapher` | Generates Python visualization code, runs it with `MPLBACKEND=Agg`, retries with higher temperature, and saves the graph mapping. |
+| `add_graph_in_conspect` | Copies successful PNG files into the final `assets/` directory and replaces placeholders with HTML image blocks. |
 
 ## Installation and Run
 
@@ -101,8 +119,8 @@ uv run python __main__.py --action clustering --path_to_file "data/example-trans
 uv run python __main__.py --action synthesizer --path_to_file "data/example-clusters/example-global-clusters/your_global_clusters.json"
 uv run python __main__.py --action convert_json_to_md --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/06_synthesizer/conspect.json"
 uv run python __main__.py --action graph_planner --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/07_conspect_md/conspect.md"
-uv run python __main__.py --action grapher --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/07_graph_planner/out_filepath.md"
-uv run python __main__.py --action add_graph_in_conspect --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/07_graph_planner/out_filepath.md" --graphs_path "data/runs/YYYY.MM.DD/HH.MM.SS/08_grapher/graphs_mapping.json"
+uv run python __main__.py --action grapher --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/08_graph_planner/out_filepath.md"
+uv run python __main__.py --action add_graph_in_conspect --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/08_graph_planner/out_filepath.md" --graphs_path "data/runs/YYYY.MM.DD/HH.MM.SS/09_grapher/graphs_mapping.json"
 ```
 
 Each CLI run creates a new session directory under `data/runs/<date>/<time>/`. If you run stages manually, pass paths to artifacts from the intended session explicitly.
@@ -123,9 +141,9 @@ Each pipeline component can be run separately for testing and debugging.
 | `clustering` | STT transcript | Global clusters via `local_clustering -> planner -> global_clustering` |
 | `synthesizer` | Global clusters | `06_synthesizer/conspect.json` |
 | `convert_json_to_md` | JSON conspect | `07_conspect_md/conspect.md` |
-| `graph_planner` | Markdown conspect | `07_graph_planner/out_filepath.md` with added `[GRAPH: ...]` tags |
-| `grapher` | Markdown with `[GRAPH: ...]` | `08_grapher/graphs_mapping.json`, Python scripts, and PNG graphs |
-| `add_graph_in_conspect` | Markdown with `[GRAPH: ...]` + `graphs_mapping.json` | `09_conspect_with_graph_md/final_conspect.md` |
+| `graph_planner` | Markdown conspect | `08_graph_planner/out_filepath.md` with added `[GRAPH_TYPE: ...]` and `08_graph_planner/out_filepath.jsonl` |
+| `grapher` | Markdown with `[GRAPH_TYPE: ...]` | `09_grapher/graphs_mapping.json`, `09_grapher/scripts/*.py`, `09_grapher/assets/*.png` |
+| `add_graph_in_conspect` | Markdown with `[GRAPH_TYPE: ...]` + `graphs_mapping.json` | `10_conspect_with_graph_md/final_conspect.md` |
 
 ## Output Artifacts
 
@@ -145,11 +163,12 @@ Main stage directories:
 - `05.1_extractor/` - JSONL output from the internal extractor during synthesis.
 - `06_synthesizer/` - JSON conspect.
 - `07_conspect_md/` - Markdown conspect before final graph replacement.
-- `07_graph_planner/` - Markdown after `[GRAPH: ...]` insertion and graph planner JSONL chunk responses.
-- `08_grapher/` - `graphs_mapping.json` and generated graphs.
-- `08_grapher/scripts/` - Python scripts used to render graphs.
-- `09_conspect_with_graph_md/` - final Markdown conspect.
-- `09_conspect_with_graph_md/assets/` - local images copied for the final Markdown.
+- `08_graph_planner/` - Markdown after `[GRAPH_TYPE: ...]` insertion and graph planner JSONL chunk responses.
+- `09_grapher/` - `graphs_mapping.json` and generated graphs.
+- `09_grapher/assets/` - PNG graphs created by `AgentGrapher`.
+- `09_grapher/scripts/` - Python scripts used to render graphs.
+- `10_conspect_with_graph_md/` - final Markdown conspect.
+- `10_conspect_with_graph_md/assets/` - local images copied for the final Markdown.
 
 ## Configuration
 
@@ -169,7 +188,7 @@ Current default configuration:
 | STT | `large-v3-turbo` |
 | Local/Global Planner LLM | `t-tech/T-lite-it-2.1-GGUF`, `T-lite-it-2.1-Q5_K_M.gguf` |
 | Synthesizer LLM | `t-tech/T-lite-it-2.1-GGUF`, `T-lite-it-2.1-Q5_K_M.gguf` |
-| Extractor LLM | `t-tech/T-lite-it-2.1-GGUF`, `T-lite-it-2.1-Q5_K_M.gguf` |
+| Extractor LLM | Uses the same loaded model as the synthesizer |
 | Graph Planner LLM | `t-tech/T-lite-it-2.1-GGUF`, `T-lite-it-2.1-Q5_K_M.gguf` |
 | Grapher LLM | `Qwen/Qwen2.5-Coder-7B-Instruct-GGUF`, `qwen2.5-coder-7b-instruct-q6_k.gguf` |
 | Local embeddings | `cointegrated/rubert-tiny2` |
@@ -189,6 +208,15 @@ Main configuration files:
 | Local Clusterizer | `src/configs/config-clusterizer/config_local_clusterizer.yaml` | - |
 | Global Clusterizer | `src/configs/config-clusterizer/config_global_clusterizer.yaml` | - |
 
+Additional visualizer parameters:
+
+| Component | Config key | Meaning |
+| --- | --- | --- |
+| `AgentGraphPlanner` | `available_lib` | List of libraries the graph planner accounts for when preparing the graph task. |
+| `AgentGrapher` | `available_lib` | List of libraries available to the LLM coder during Python script generation. |
+| `AgentGrapher` | `re_try_count` | Number of code generation and execution attempts. Currently `3`. |
+| `AgentGrapher` | `step_temperature` | Temperature increase step between retries. Currently `0.1`. |
+
 Additional dataclass configuration descriptions are located in `src/configs/configs.py`.
 
 ## Evaluation
@@ -199,4 +227,4 @@ Additional dataclass configuration descriptions are located in `src/configs/conf
 
 Examples of conspects generated with LongConspectWriter are located in the [examples](examples) directory.
 
-Current examples are located in [examples/v1.5](examples/v1.5).
+Current filled examples are located in [examples/v1.5](examples/v1.5).
