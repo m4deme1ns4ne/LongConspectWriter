@@ -253,9 +253,42 @@ class LongConspectWriterPipeline(BasePipeline):
             gen_config=self.config.grapher.gen_config,
             app_config=self.config.grapher.app_config,
             lecture_theme=self.pipeline_config.lecture_theme,
+            getting_graphs_from_conspect_func=LongConspectWriterPipeline.getting_graphs_from_conspect,
         ) as grapher:
             new_path = grapher.run(path)
             return new_path
+
+    def getting_graphs_from_conspect(
+        self,
+        conspect: str,
+        tag_open: str = "[",
+        tag_close: str = "]",
+        tag_meat: str = "[GRAPH_TYPE:",
+    ) -> list[tuple[int, int, str]]:
+        """
+        Ищет все теги [GRAPH_TYPE: ...] с учетом вложенности скобок.
+        Возвращает список кортежей (индекс_начала, индекс_конца, сам_текст_тега).
+        """
+        graphs = []
+        char_open_count = 0
+        idx_start = 0
+
+        for i, char in enumerate(conspect):
+            if char == tag_open:
+                if char_open_count == 0:
+                    if conspect[i : i + 12] == tag_meat:
+                        char_open_count = 1
+                        idx_start = i
+                else:
+                    char_open_count += 1
+            elif char == tag_close:
+                if char_open_count > 0:
+                    char_open_count -= 1
+                    if char_open_count == 0:
+                        left_bound = max(0, idx_start - 200)
+                        right_bound = min(len(conspect), i + 201)
+                        graphs.append((idx_start, i, conspect[left_bound:right_bound]))
+        return graphs
 
     # Добавить в utils или создать новую папку хз
     def add_graph_in_conspect(
@@ -268,7 +301,7 @@ class LongConspectWriterPipeline(BasePipeline):
         with open(conspect_md_path, "r", encoding="utf-8") as file:
             conspect = file.read()
 
-        stage_name = "09_conspect_with_graph_md"
+        stage_name = "10_conspect_with_graph_md"
         final_md_dir = self.actual_session_dir / stage_name
 
         # Создаем папку для картинок рядом с финальным конспектом в новой сессии
@@ -282,20 +315,23 @@ class LongConspectWriterPipeline(BasePipeline):
             if value["status"] == "success":
                 # Ищем картинку там же, где лежит JSON, а не в новой пустой сессии
                 absolute_image_path = graphs_base_dir / value["path"]
+                image_name = value["name_graph"]
+                formated_image_name = image_name.split("___")[1].replace("_", " ").replace(".png", "")
 
                 if absolute_image_path.exists():
                     destination_path = final_assets_dir / absolute_image_path.name
                     shutil.copy2(absolute_image_path, destination_path)
 
                     markdown_valid_path = f"assets/{absolute_image_path.name}"
-                    replacement = f"![Сгенерированный график]({markdown_valid_path})"
+                    replacement = f"""<div align='center'><img src='{markdown_valid_path}' width='700'><br><p>{formated_image_name}</p></div>
+"""
                 else:
                     logger.error(f"Файл не найден при сборке: {absolute_image_path}")
                     replacement = (
-                        f"> ⚠️ *Ошибка сборки: файл {absolute_image_path.name} утерян*"
+                        f"*Ошибка сборки: файл {absolute_image_path.name} утерян*"
                     )
             else:
-                replacement = f"> ⚠️ *Ошибка генерации визуализации для: {place_holder}*"
+                replacement = f"*Ошибка генерации визуализации для: {place_holder}*"
 
             conspect = conspect.replace(place_holder, replacement)
 

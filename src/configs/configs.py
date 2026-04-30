@@ -94,6 +94,11 @@ class LLMAppConfig:
     chunk_overlap_ratio: float | None = None
     last_tail_words_count: int = None
     scheme_output_path: dict = None
+    error_massage: str = None
+    bad_code: str = None
+    re_try_count: int = None
+    step_temperature: float = None
+    available_lib: str | None = None
 
 
 @dataclass

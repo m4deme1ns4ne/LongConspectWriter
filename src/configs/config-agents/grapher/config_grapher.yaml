@@ -17,4 +17,9 @@ gen_config:
 app_config:
   agent_name: "grapher"
   prompt_path: "src/configs/config-agents/grapher/prompt_grapher.yaml"
-  name_stage_dir: "08_grapher/"
+  name_stage_dir: "09_grapher/"
+  error_massage: "Это первый прогон, ошибок нету."
+  bad_code: "Ты пишешь код первый раз. Ретраев пока нету!"
+  re_try_count: 3 
+  step_temperature: 0.1
+  available_lib: "matplotlib, numpy, math, networkx, pandas, seaborn, plotly" # Потом добавить в pipeline config
