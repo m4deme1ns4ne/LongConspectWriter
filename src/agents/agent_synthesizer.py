@@ -1,3 +1,10 @@
+"""Агент финального синтеза для пайплайна LongConspectWriter.
+
+Агент пишет длинный конспект тема за темой из глобальных кластеров и использует
+extractor-помощник, чтобы сохранить существующую семантику словаря контекста
+для уже разобранных сущностей лекции.
+"""
+
 from tqdm import tqdm
 import sys
 from pathlib import Path
@@ -7,12 +14,36 @@ from loguru import logger
 from src.core.base import BaseLlamaCppAgent
 from src.core.utils import TextsSplitter, ColoursForTqdm
 from src.agents.agent_extractor import _AgentExtractor
+from src.configs.configs import LLMAppConfig, LLMGenConfig
+from typing import Any
 
 
 class AgentSynthesizerLlama(BaseLlamaCppAgent):
+    """Синтезирует итоговый JSON-конспект из глобальных кластеров."""
+
     def __init__(
-        self, session_dir: Path, extractor_gen_config, extractor_app_config, **kwargs
-    ):
+        self,
+        session_dir: Path,
+        extractor_gen_config: LLMGenConfig,
+        extractor_app_config: LLMAppConfig,
+        **kwargs: Any,
+    ) -> None:
+        """Инициализирует конфигурацию синтезатора и extractor.
+
+        Args:
+            session_dir (Path): Директория текущей сессии пайплайна.
+            extractor_gen_config (LLMGenConfig): Generation settings for the
+                per-chunk extractor helper.
+            extractor_app_config (LLMAppConfig): App settings and schema paths
+                для extractor-помощника.
+            **kwargs (Any): LLM configuration passed to ``BaseLlamaCppAgent``.
+
+        Returns:
+            None: Синтезатор сохраняет сессию, модель и конфиг extractor.
+
+        Raises:
+            Exception: Пробрасывает ошибки инициализации базового агента.
+        """
         self.session_dir = session_dir
         self.extractor_gen_config = extractor_gen_config
         self.extractor_app_config = extractor_app_config
@@ -21,7 +52,28 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
 
         super().__init__(**kwargs)
 
-    def _generate_synthesizer_chunk(self, chunk, topik, already_seen_themes, last_tail):
+    def _generate_synthesizer_chunk(
+        self,
+        chunk: str,
+        topik: str,
+        already_seen_themes: set[str],
+        last_tail: str,
+    ) -> str:
+        """Генерирует текст конспекта для одного чанка темы.
+
+        Args:
+            chunk (str): Текстовый чанк из текущего глобального кластера.
+            topik (str): Заголовок текущей глобальной темы.
+            already_seen_themes (set[str]): Entities already extracted from
+                previous synthesized chunks.
+            last_tail (str): Хвост предыдущего сгенерированного чанка для связности.
+
+        Returns:
+            str: Синтезированный текст конспекта для чанка.
+
+        Raises:
+            Exception: Пробрасывает ошибки генерации LLM.
+        """
         with tqdm(
             total=self._gen_config.max_tokens,
             desc="Генерация токенов для чанка",
@@ -55,8 +107,28 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
         return response
 
     def _generate_synthesizer(
-        self, split_clusters, topik, conspect, already_seen_themes
-    ):
+        self,
+        split_clusters: list[str],
+        topik: str,
+        conspect: dict[str, list[str]],
+        already_seen_themes: set[str],
+    ) -> None:
+        """Генерирует все чанки для одной глобальной темы и обновляет контекст.
+
+        Args:
+            split_clusters (list[str]): Токен-размерные чанки текста темы.
+            topik (str): Заголовок текущей глобальной темы.
+            conspect (dict[str, list[str]]): Mutable conspect accumulator keyed
+                by topic title.
+            already_seen_themes (set[str]): Mutable context of extracted terms
+                shared across synthesized chunks.
+
+        Returns:
+            None: Аккумуляторы конспекта и контекста обновляются на месте.
+
+        Raises:
+            Exception: Пробрасывает ошибки синтезатора или extractor.
+        """
         extractor = _AgentExtractor(
             init_config=self._init_config,
             gen_config=self.extractor_gen_config,
@@ -92,7 +164,20 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
                     already_seen_themes.add(term.lower())
                 chunk_pbar.update(1)
 
-    def run(self, path: Path) -> str:
+    def run(self, path: str | Path) -> Path:
+        """Синтезирует итоговый JSON-конспект из артефакта глобальных кластеров.
+
+        Args:
+            path (str | Path): Путь к глобальным кластерам, сгруппированным по главам/темам.
+
+        Returns:
+            Path: Путь к JSON-артефакту синтезированного конспекта.
+
+        Raises:
+            OSError: Если нет доступа к входным или выходным артефактам.
+            json.JSONDecodeError: Если глобальные кластеры не являются валидным JSON.
+            Exception: Пробрасывает ошибки разбиения, генерации или извлечения.
+        """
         with open(path, "r", encoding="utf-8") as file:
             global_clusters = json.load(file)
 

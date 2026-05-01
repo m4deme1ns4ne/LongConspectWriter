@@ -1,4 +1,10 @@
-import time
+"""Этап speech-to-text для пайплайна LongConspectWriter.
+
+Модуль оборачивает транскрибацию FasterWhisper, сохраняет артефакт сырого
+транскрипта и возвращает его путь следующему этапу кластеризации.
+"""
+
+
 import os
 import sys
 from pathlib import Path
@@ -9,21 +15,43 @@ from dataclasses import asdict
 
 
 class FasterWhisper(BaseSTTAgent):
-    def __init__(self, session_dir, **kwargs):
+    """Реализация первого этапа пайплайна на FasterWhisper."""
+
+    def __init__(self, session_dir: Path, **kwargs: object) -> None:
+        """Инициализирует STT-агента для текущей сессии пайплайна.
+
+        Args:
+            session_dir (Path): Директория текущего запуска, где хранятся артефакты
+                транскрипта.
+            **kwargs (object): Configuration arguments forwarded to
+                ``BaseSTTAgent``.
+
+        Returns:
+            None: Агент сохраняет состояние сессии и модели.
+
+        Raises:
+            Exception: Пробрасывает ошибки загрузки модели и prompt из
+                базового STT-агента.
+        """
         self.session_dir = session_dir
         super().__init__(**kwargs)
 
-    def run(self, audio_file_path: Path) -> str:
+    def run(self, audio_file_path: str | os.PathLike) -> Path:
         """
         Транскрибирует аудиофайл в текст.
 
         Args:
-            audio_file_path (str): Путь к аудиофайлу для транскрибации.
-            output_dir (str): Папка для сохранения результатов.
-            language_audio (str | None): Язык аудиофайла, если значение None, то модель сама распознает язык.
+            audio_file_path (str | os.PathLike): Путь к аудиофайлу лекции,
+                который открывает последовательный пайплайн.
 
         Returns:
-            str: Путь к сохраненному файлу транскрипции.
+            Path: Путь к сохраненному JSON-файлу транскрипции для локальной
+            кластеризации.
+
+        Raises:
+            FileNotFoundError: Если исходный аудиофайл не существует.
+            OSError: Если артефакт транскрипта невозможно сохранить.
+            Exception: Пробрасывает ошибки транскрибации FasterWhisper.
         """
         if not os.path.exists(audio_file_path):
             logger.error(f"Файл не найден: {audio_file_path}")

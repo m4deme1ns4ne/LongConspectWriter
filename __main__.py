@@ -1,3 +1,10 @@
+"""CLI-точка входа для запуска этапов пайплайна LongConspectWriter.
+
+Модуль загружает YAML-конфигурацию, собирает полный конфиг сессии пайплайна
+и запускает выбранное действие, сохраняя порядок этапов, заданный в
+``LongConspectWriterPipeline``.
+"""
+
 import yaml
 import argparse
 from pathlib import Path
@@ -24,6 +31,20 @@ from src.core.utils import load_agent_bundle
 
 
 def main() -> None:
+    """Разбирает CLI-аргументы, загружает конфиги и запускает выбранное действие пайплайна.
+
+    Args:
+        None: CLI-входы читаются из ``argparse``.
+
+    Returns:
+        None: Результаты логируются, а артефакты этапов записываются в директорию
+        сессии запуска.
+
+    Raises:
+        OSError: Если конфигурационные или входные файлы невозможно прочитать.
+        yaml.YAMLError: Если YAML-файл пайплайна невалиден.
+        Exception: Пробрасывает ошибки выбранного этапа пайплайна.
+    """
     load_dotenv()
     logger.remove()
     logger.add(

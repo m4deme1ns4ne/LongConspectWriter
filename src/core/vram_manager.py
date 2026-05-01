@@ -1,3 +1,12 @@
+"""Утилиты для наблюдения за GPU-памятью и ее очистки между этапами пайплайна.
+
+Модуль используется агентами LongConspectWriter при завершении этапа, когда
+загруженную модель можно освободить без изменения состояния последовательного
+пайплайна.
+"""
+
+from typing import Optional
+
 from loguru import logger
 import gc
 import torch
@@ -5,8 +14,18 @@ import pynvml
 
 
 class VRamUsage:
+    """Читает текущие счетчики VRAM для активного CUDA-устройства."""
+
     @staticmethod
-    def get_vram_usage() -> str:
+    def get_vram_usage() -> tuple[float, float, float]:
+        """Возвращает использованную, свободную и общую видеопамять (VRAM) устройства 0 в мегабайтах.
+
+        Returns:
+            tuple[float, float, float]: Значения использованной, свободной и общей VRAM в МБ.
+
+        Raises:
+            pynvml.NVMLError: Обрабатывается внутри функции и представляется в виде нулевых значений.
+        """
         try:
             pynvml.nvmlInit()
             handle = pynvml.nvmlDeviceGetHandleByIndex(0)
@@ -24,8 +43,23 @@ class VRamUsage:
 
 
 class VRamCleaner:
+    """Очищает память Python и CUDA после завершения этапа агентом."""
+
     @staticmethod
-    def empty_vram(caller_name: str | None = None) -> None:
+    def empty_vram(caller_name: Optional[str] = None) -> None:
+        """Освобождает кешированную CUDA-память для только что завершившего агента.
+
+        Args:
+            caller_name (Optional[str]): Имя агента LongConspectWriter или
+                этапа, запросившего очистку. Используется только для диагностического логирования.
+
+        Returns:
+            None: Метод выполняет очистку и пишет логи.
+
+        Raises:
+            Exception: Обрабатывается внутри, потому что очистка не должна прерывать
+                последовательный пайплайн после того, как этап создал выход.
+        """
         owner = caller_name or "unknown"
         gc.collect()
 

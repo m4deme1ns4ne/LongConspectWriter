@@ -1,3 +1,10 @@
+"""Агент рендера графиков для LongConspectWriter.
+
+Агент превращает плейсхолдеры графиков от graph planner в Python-скрипты,
+запускает их в ограниченном подпроцессе и сохраняет маппинг для финальной
+сборки Markdown.
+"""
+
 from loguru import logger
 from tqdm import tqdm
 import sys
@@ -7,10 +14,35 @@ from src.core.utils import ColoursForTqdm
 import re
 import subprocess
 import os
+from typing import Any, Callable
 
 
 class AgentGrapher(BaseLlamaCppAgent):
-    def __init__(self, session_dir: Path, getting_graphs_from_conspect_func, **kwargs):
+    """Генерирует визуальные ассеты графиков для Markdown-плейсхолдеров."""
+
+    def __init__(
+        self,
+        session_dir: Path,
+        getting_graphs_from_conspect_func: Callable[
+            [Any, str], list[tuple[int, int, str]]
+        ],
+        **kwargs: Any,
+    ) -> None:
+        """Инициализирует рендеринг графиков с callback-функцией для извлечения плейсхолдеров.
+
+        Args:
+            session_dir (Path): Директория текущей сессии пайплайна.
+            getting_graphs_from_conspect_func (Callable[[Any, str],
+                list[tuple[int, int, str]]]): Callback-функция из пайплайна,
+                которая находит теги плейсхолдеров графиков в конспекте.
+            **kwargs (Any): Конфигурация LLM, передаваемая в ``BaseLlamaCppAgent``.
+
+        Returns:
+            None: Grapher сохраняет сессию, callback и состояние модели.
+
+        Raises:
+            Exception: Пробрасывает ошибки инициализации базового агента.
+        """
         self.session_dir = session_dir
         self.getting_graphs_from_conspect = getting_graphs_from_conspect_func
         super().__init__(**kwargs)
@@ -18,8 +50,19 @@ class AgentGrapher(BaseLlamaCppAgent):
     def _generate_graph_code(
         self, description: str, target_image_path: Path, error: str, bad_code: str
     ) -> str:
-        """
-        Изолированный метод для обращения к LLM.
+        """Генерирует Python-код для отрисовки одного плейсхолдера графика.
+
+        Args:
+            description (str): Контекст плейсхолдера и задача визуализации.
+            target_image_path (Path): Ожидаемый путь к изображению, которое должен создать скрипт.
+            error (str): Предыдущая ошибка отрисовки, передаваемая в повторные запросы.
+            bad_code (str): Предыдущий неудачный код, передаваемый в повторные запросы.
+
+        Returns:
+            str: Сырой ответ LLM, который должен содержать блок Python-кода.
+
+        Raises:
+            Exception: Пробрасывает ошибки генерации LLM.
         """
         with tqdm(
             total=self._gen_config.max_tokens,
@@ -46,9 +89,21 @@ class AgentGrapher(BaseLlamaCppAgent):
 
     def _code_call(
         self, code: str, expected_image_path: Path, script_path: Path
-    ) -> bool:
-        """
-        Сохраняет код в файл и выполняет его в подпроцессе.
+    ) -> bool | tuple[bool, str]:
+        """Сохраняет сгенерированный код и выполняет его в подпроцессе.
+
+        Args:
+            code (str): Сырой ответ LLM, содержащий блок Python-кода.
+            expected_image_path (Path): Путь к изображению, которое должен создать
+                сгенерированный скрипт.
+            script_path (Path): Путь к файлу, в который сохраняется сгенерированный скрипт.
+
+        Returns:
+            bool | tuple[bool, str]: Результат исходной ветки или флаг успешности вместе
+            с диагностическим текстом в формате stderr.
+
+        Raises:
+            OSError: Если невозможно записать сгенерированный скрипт.
         """
         match = re.search(r"```python\n(.*?)\n```", code, re.DOTALL)
         if not match:
@@ -114,7 +169,22 @@ class AgentGrapher(BaseLlamaCppAgent):
             )
             return False, "Превышен лимит времени выполнения (15 секунд)."
 
-    def re_try(self, description, target_image_path, script_path):
+    def re_try(
+        self, description: str, target_image_path: Path, script_path: Path
+    ) -> bool:
+        """Повторяет генерацию и рендеринг кода графика с изменённой температурой.
+
+        Args:
+            description (str): Контекст плейсхолдера и задача визуализации.
+            target_image_path (Path): Ожидаемый путь к выходному изображению.
+            script_path (Path): Путь, по которому записывается сгенерированный Python-код.
+
+        Returns:
+            bool: Было ли изображение графика успешно сгенерировано.
+
+        Raises:
+            Exception: Пробрасывает ошибки генерации или записи скрипта.
+        """
         is_success = False
         bad_code = self._app_config.bad_code
         error_message = self._app_config.error_massage
@@ -156,7 +226,19 @@ class AgentGrapher(BaseLlamaCppAgent):
         self._gen_config.temperature = original_temp
         return is_success
 
-    def run(self, path: Path = None) -> str:
+    def run(self, path: str | Path | None = None) -> str:
+        """Генерирует все изображения графиков, запрошенные плейсхолдерами в Markdown.
+
+        Args:
+            path (str | Path | None): Путь к Markdown с плейсхолдерами графиков.
+
+        Returns:
+            str: Путь к JSON, который связывает плейсхолдеры со сгенерированными изображениями.
+
+        Raises:
+            OSError: Если нет доступа к входному Markdown или выходным артефактам.
+            Exception: Пробрасывает ошибки генерации графиков.
+        """
         with open(path, "r", encoding="utf-8") as file:
             conspect = file.read()
 
@@ -190,7 +272,7 @@ class AgentGrapher(BaseLlamaCppAgent):
 
             title_match = re.search(r"GRAPH_TITLE:\s*(.*?)(?:\||\])", original_tag)
             raw_title = title_match.group(1).strip() if title_match else "Иллюстрация"
-            safe_title = re.sub(r'[^\w\-]', '_', raw_title)
+            safe_title = re.sub(r"[^\w\-]", "_", raw_title)
 
             target_image_path = self._get_output_file_path(
                 session_dir=self.session_dir,

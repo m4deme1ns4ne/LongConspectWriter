@@ -1,3 +1,10 @@
+"""Общие вспомогательные утилиты для этапов пайплайна LongConspectWriter.
+
+Модуль содержит разбиение текста, загрузку промптов, настройку ретраев,
+логирование времени выполнения, проверку выходных путей и загрузку пакетов
+конфигураций, используемых core-этапами и агентами.
+"""
+
 from loguru import logger
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import yaml
@@ -9,19 +16,56 @@ import sys
 from dataclasses import dataclass
 from src.configs.configs import AgentConfigBundle
 from tenacity import stop_after_attempt, wait_fixed, retry
-from typing import Callable, Any
+from tenacity import RetryCallState
+from typing import Callable, Any, Optional, TypeVar, ParamSpec
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 class TextsSplitter:
+    """Разбивает текст лекции на предложения и токен-размерные фрагменты."""
+
     @staticmethod
     def split_text_to_sentences(text: str) -> list[str]:
+        """Разбивает транскрипт или тело кластера на строки предложений.
+
+        Args:
+            text (str): Lecture transcript text flowing through the
+                LongConspectWriter clustering stages.
+
+        Returns:
+            list[str]: Упорядоченные тексты предложений, извлеченные из входа.
+
+        Raises:
+            Exception: Пробрасывает ошибки токенизатора ``razdel``, если
+                парсинг предложений не удался.
+        """
         sentences = list(sentenize(text))
         return [sentence.text for sentence in sentences]
 
     @staticmethod
     def split_text_to_tokens(
-        text: str, tokenizer: str, chunk_size: int = 2000, chunk_overlap: int = 0
+        text: str,
+        tokenizer: Callable[[bytes], Any],
+        chunk_size: int = 2000,
+        chunk_overlap: int = 0,
     ) -> list[str]:
+        """Разбивает текст на чанки, измеряемые переданным токенизатором модели.
+
+        Args:
+            text (str): Lecture text that must fit into downstream LLM context.
+            tokenizer (Callable[[bytes], Any]): Tokenizer callable used by the
+                active model to estimate encoded chunk length.
+            chunk_size (int): Maximum token-like length for each chunk.
+            chunk_overlap (int): Overlap between adjacent chunks.
+
+        Returns:
+            list[str]: Ordered text chunks ready for an agent prompt.
+
+        Raises:
+            Exception: Пробрасывает ошибки токенизатора или text splitter.
+        """
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
@@ -36,8 +80,19 @@ class TextsSplitter:
         return chunks
 
 
-def log_retry_attempt(retry_state):
-    """Хук для tenacity, чтобы логировать неудачные попытки через loguru."""
+def log_retry_attempt(retry_state: RetryCallState) -> None:
+    """Хук для tenacity, чтобы логировать неудачные попытки через loguru.
+
+    Args:
+        retry_state (RetryCallState): Состояние упавшего вызова агента или утилиты,
+            который ретраится внутри пайплайна.
+
+    Returns:
+        None: Функция только логирует retry-диагностику.
+
+    Raises:
+        Exception: Does not raise intentionally; tenacity owns retry control.
+    """
     exception = retry_state.outcome.exception()
     logger.warning(
         f"Сбой выполнения. Попытка {retry_state.attempt_number}. "
@@ -46,8 +101,24 @@ def log_retry_attempt(retry_state):
 
 
 class LoadPrompts:
+    """Загружает YAML-словари промптов для агентов."""
+
     @staticmethod
     def load_prompts(file_path: str | PathLike) -> dict[str, dict[str, str]]:
+        """Читает YAML-файл промптов агента.
+
+        Args:
+            file_path (str | PathLike): Путь к конфигурации prompt, используемой
+                агентом LongConspectWriter.
+
+        Returns:
+            dict[str, dict[str, str]]: Распарсенное дерево prompt с ключами по именам агентов
+            и секциям prompt.
+
+        Raises:
+            OSError: Если YAML-файл prompt невозможно открыть.
+            yaml.YAMLError: Если файл prompt не является валидным YAML.
+        """
         with open(file_path, "r", encoding="utf-8") as file:
             return yaml.safe_load(file)
 
@@ -60,9 +131,34 @@ modify_retry = retry(
 )
 
 
-def log_execution_time(func):
+def log_execution_time(func: Callable[P, R]) -> Callable[P, R]:
+    """Декорирует метод этапа пайплайна логированием времени выполнения.
+
+    Args:
+        func (Callable[P, R]): Метод этапа, обычно ``run``, длительность которого
+            должна быть видна в логах.
+
+    Returns:
+        Callable[P, R]: Обернутый callable с неизмененным возвращаемым значением.
+
+    Raises:
+        Exception: Пробрасывает любое исключение, выброшенное обернутым callable.
+    """
+
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        """Запускает обернутый callable пайплайна и логирует прошедшее время.
+
+        Args:
+            *args (P.args): Позиционные аргументы для обернутого метода этапа.
+            **kwargs (P.kwargs): Именованные аргументы для обернутого метода этапа.
+
+        Returns:
+            R: Неизмененный результат обернутого callable.
+
+        Raises:
+            Exception: Пробрасывает любое исключение из обернутого callable.
+        """
         start = time.perf_counter()
         result = func(*args, **kwargs)
         elapsed = time.perf_counter() - start
@@ -77,9 +173,35 @@ def log_execution_time(func):
     return wrapper
 
 
-def check_path_is(func):
+def check_path_is(func: Callable[P, R]) -> Callable[P, R]:
+    """Проверяет, что этап пайплайна вернул непустой path-like результат.
+
+    Args:
+        func (Callable[P, R]): Метод перехода пайплайна, который должен вернуть
+            путь к артефакту для следующего этапа LongConspectWriter.
+
+    Returns:
+        Callable[P, R]: Обернутая функция, которая завершает процесс при пустом пути.
+
+    Raises:
+        SystemExit: Если обернутый этап возвращает ``None`` и пайплайн не может
+            безопасно продолжиться.
+    """
+
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        """Запускает обернутый этап и проверяет, что он создал path-like значение.
+
+        Args:
+            *args (P.args): Позиционные аргументы для обернутого метода пайплайна.
+            **kwargs (P.kwargs): Именованные аргументы для обернутого метода пайплайна.
+
+        Returns:
+            R: Непустой результат обернутого callable.
+
+        Raises:
+            SystemExit: Если обернутый callable возвращает ``None``.
+        """
         out_path = func(*args, **kwargs)
         if out_path is None:
             logger.critical(f"{func.__qualname__} сгенерировал пустой путь.")
@@ -91,6 +213,8 @@ def check_path_is(func):
 
 @dataclass
 class ColoursForTqdm:
+    """Цветовые константы для вложенных progress bar LongConspectWriter."""
+
     first_level: str = "#002b00"
     second_level: str = "#005f00"
     third_level: str = "#00af00"
@@ -99,11 +223,30 @@ class ColoursForTqdm:
 
 
 def load_agent_bundle(
-    yaml_path,
-    cls_init_config=None,
-    cls_gen_config=None,
-    cls_app_config=None,
-):
+    yaml_path: str | PathLike,
+    cls_init_config: Optional[Callable[..., Any]] = None,
+    cls_gen_config: Optional[Callable[..., Any]] = None,
+    cls_app_config: Optional[Callable[..., Any]] = None,
+) -> AgentConfigBundle:
+    """Загружает пакет конфигурации агента из YAML в указанные типы dataclass.
+
+    Args:
+        yaml_path (str | PathLike): Путь к YAML-конфигу агента.
+        cls_init_config (Optional[Callable[..., Any]]): Dataclass или фабрика для
+            секции инициализации модели.
+        cls_gen_config (Optional[Callable[..., Any]]): Dataclass или фабрика для
+            секции генерации.
+        cls_app_config (Optional[Callable[..., Any]]): Dataclass или фабрика для
+            секции применения в пайплайне.
+
+    Returns:
+        AgentConfigBundle: Пакет конфигурации, который используется конструктором соответствующего агента.
+
+    Raises:
+        OSError: Если YAML-конфиг невозможно открыть.
+        yaml.YAMLError: Если конфиг не является корректным YAML.
+        TypeError: Если переданная фабрика конфигурации отклоняет распарсенную секцию.
+    """
     with open(yaml_path, "r", encoding="utf-8") as file:
         config = yaml.safe_load(file)
 

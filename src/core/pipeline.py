@@ -1,3 +1,10 @@
+"""Оркестрация последовательного пайплайна LongConspectWriter.
+
+Модуль связывает STT, кластеризацию, планирование, синтез, планирование
+графиков, рендер графиков и финальную сборку Markdown в релизный пайплайн.
+Каждый метод сохраняет существующий контракт передачи путей между этапами.
+"""
+
 import os
 from src.core.base import BasePipeline
 from src.core.utils import check_path_is
@@ -10,7 +17,21 @@ from pathlib import Path
 
 
 class LongConspectWriterPipeline(BasePipeline):
-    def __init__(self, session_config: PipelineSessionConfig):
+    """Координирует все этапы LongConspectWriter в строгом порядке."""
+
+    def __init__(self, session_config: PipelineSessionConfig) -> None:
+        """Инициализирует запуск пайплайна и создает директорию сессии.
+
+        Args:
+            session_config (PipelineSessionConfig): Fully loaded configuration
+                for every LongConspectWriter stage.
+
+        Returns:
+            None: Пайплайн сохраняет конфиг и состояние активной сессии.
+
+        Raises:
+            OSError: Если выходную директорию сессии невозможно создать.
+        """
         self.config = session_config
         self.pipeline_config = self.config.pipeline
         self.__post_init__()
@@ -27,6 +48,19 @@ class LongConspectWriterPipeline(BasePipeline):
     def _run_stt_process(
         self, path: str | os.PathLike, result_queue: multiprocessing.Queue
     ) -> None:
+        """Запускает STT в изолированном процессе и публикует путь результата.
+
+        Args:
+            path (str | os.PathLike): Source lecture audio/video path.
+            result_queue (multiprocessing.Queue): Queue used to return status
+                и путь транскрипта в родительский процесс пайплайна.
+
+        Returns:
+            None: Метод записывает словарь статуса в ``result_queue``.
+
+        Raises:
+            Exception: Обрабатывается внутри и сериализуется в очередь.
+        """
         try:
             from src.core.stt import FasterWhisper
 
@@ -43,10 +77,17 @@ class LongConspectWriterPipeline(BasePipeline):
             result_queue.put({"status": "error", "error": str(e)})
 
     def _call_stt(self, path: str | os.PathLike) -> str:
-        """
-        Запускает модель транскрибации (FasterWhisper).
-        Вход (path): Путь к исходному аудио или видео файлу.
-        Выход: Путь к текстовому файлу (.txt) с сырой транскрипцией.
+        """Запускает этап транскрибации FasterWhisper.
+
+        Args:
+            path (str | os.PathLike): Путь к исходному аудио или видео лекции.
+
+        Returns:
+            str: Путь к сырому артефакту транскрипта, созданному STT.
+
+        Raises:
+            RuntimeError: Если изолированный STT-процесс сообщает об ошибке или завершается
+                без возврата результата.
         """
         logger.info("Запуск STT агента в изолированном процессе...")
         result_queue = multiprocessing.Queue()
@@ -70,6 +111,17 @@ class LongConspectWriterPipeline(BasePipeline):
 
     @check_path_is
     def _call_local_clustering(self, path: str | os.PathLike) -> str | os.PathLike:
+        """Запускает локальную хронологическую кластеризацию по артефакту транскрипта.
+
+        Args:
+            path (str | os.PathLike): Путь к артефакту транскрипта.
+
+        Returns:
+            str | os.PathLike: Путь к локальным кластерам для этапов планирования.
+
+        Raises:
+            Exception: Пробрасывает ошибки локальной кластеризации.
+        """
         from src.core.clustering import SemanticLocalClusterizer
 
         model_local_clustering = SemanticLocalClusterizer(
@@ -82,10 +134,16 @@ class LongConspectWriterPipeline(BasePipeline):
 
     @check_path_is
     def _call_local_planner(self, path: str | os.PathLike) -> str | os.PathLike:
-        """
-        Генерирует микро-темы для каждого абзаца на основе хронологических кластеров.
-        Вход (path): Путь к локальным кластерам.
-        Выход: Путь к файлу (.md) с плоским списком всех микро-тем лекции.
+        """Генерирует микротемы для каждого локального кластера.
+
+        Args:
+            path (str | os.PathLike): Путь к локальным хронологическим кластерам.
+
+        Returns:
+            str | os.PathLike: Путь к Markdown-артефакту со всеми микротемами лекции.
+
+        Raises:
+            Exception: Пробрасывает ошибки генерации или сохранения локального планировщика.
         """
         from src.agents.agent_planner import AgentLocalPlanner
 
@@ -104,10 +162,17 @@ class LongConspectWriterPipeline(BasePipeline):
         self,
         path: str | os.PathLike,
     ) -> str | os.PathLike:
-        """
-        Собирает микро-темы в финальное оглавление (LLM Reduce).
-        Вход (path): Путь к списку микро-тем (результат LocalPlanner).
-        Выход: Путь к JSON-файлу со структурой глав (chapter_title, description).
+        """Сворачивает микротемы в глобальный план глав.
+
+        Args:
+            path (str | os.PathLike): Путь к артефакту микротем локального планировщика.
+
+        Returns:
+            str | os.PathLike: Путь к JSON глобального плана с заголовками
+            и описаниями глав.
+
+        Raises:
+            Exception: Пробрасывает ошибки генерации или сохранения глобального планировщика.
         """
         from src.agents.agent_planner import AgentGlobalPlanner
 
@@ -126,10 +191,16 @@ class LongConspectWriterPipeline(BasePipeline):
         self,
         path: str | os.PathLike,
     ) -> str | os.PathLike:
-        """
-        Оркестратор планирования (Local -> Global).
-        Вход (path): Путь к локальным кластерам (сырые абзацы).
-        Выход: Путь к глобальному плану (JSON-оглавление).
+        """Запускает локальное, затем глобальное планирование.
+
+        Args:
+            path (str | os.PathLike): Путь к тексту локальных кластеров.
+
+        Returns:
+            str | os.PathLike: Путь к артефакту глобального плана.
+
+        Raises:
+            Exception: Пробрасывает ошибки этапов планирования.
         """
         local_clusters_path = self._call_local_planner(path)
         new_path = self._call_global_planner(local_clusters_path)
@@ -142,6 +213,18 @@ class LongConspectWriterPipeline(BasePipeline):
         global_plan_path: str | os.PathLike,
         local_clusters_path: str | os.PathLike,
     ) -> str | os.PathLike:
+        """Назначает локальные кластеры главам из глобального плана.
+
+        Args:
+            global_plan_path (str | os.PathLike): Путь к JSON глобального плана.
+            local_clusters_path (str | os.PathLike): Путь к локальным кластерам.
+
+        Returns:
+            str | os.PathLike: Путь к глобальным кластерам для синтеза.
+
+        Raises:
+            Exception: Пробрасывает ошибки глобальной кластеризации.
+        """
         from src.core.clustering import SemanticGlobalClusterizer
 
         model_global_clustering = SemanticGlobalClusterizer(
@@ -156,10 +239,16 @@ class LongConspectWriterPipeline(BasePipeline):
         self,
         path: str | os.PathLike,
     ) -> str | os.PathLike:
-        """
-        Главный оркестратор всей логики кластеризации текста.
-        Вход (path): Путь к сырой транскрипции (результат STT).
-        Выход: Путь к глобальным кластерам разбитым по глобальным темам.
+        """Запускает кластеризацию транскрипта и распределение по главам.
+
+        Args:
+            path (str | os.PathLike): Путь к сырому артефакту транскрипта.
+
+        Returns:
+            str | os.PathLike: Путь к глобальным кластерам, разбитым по глобальным темам.
+
+        Raises:
+            Exception: Пробрасывает ошибки этапов кластеризации или планирования.
         """
         local_clusters_path = self._call_local_clustering(path)
         plan_path = self._call_planner(local_clusters_path)
@@ -172,9 +261,16 @@ class LongConspectWriterPipeline(BasePipeline):
         self,
         path: str | os.PathLike,
     ) -> str | os.PathLike:
-        """
-        Запускает AgentSynthesizer для синтеза финального конспекта.
-        Внутри себя он поднимет AgentExtractor для обновления контекста лекции.
+        """Запускает финальный синтез конспекта по глобальным кластерам.
+
+        Args:
+            path (str | os.PathLike): Путь к глобальным кластерам, сгруппированным по темам.
+
+        Returns:
+            str | os.PathLike: Путь к JSON синтезированного конспекта.
+
+        Raises:
+            Exception: Пробрасывает ошибки синтезатора или extractor.
         """
         from src.agents.agent_synthesizer import AgentSynthesizerLlama
 
@@ -196,7 +292,17 @@ class LongConspectWriterPipeline(BasePipeline):
         self,
         path: str | os.PathLike,
     ) -> str | os.PathLike:
-        """ """
+        """Вставляет запросы на графики в Markdown-конспект.
+
+        Args:
+            path (str | os.PathLike): Путь к артефакту Markdown-конспекта.
+
+        Returns:
+            str | os.PathLike: Путь к Markdown с плейсхолдерами графиков.
+
+        Raises:
+            Exception: Пробрасывает ошибки graph planner.
+        """
         from src.agents.agent_graph_planner import AgentGraphPlanner
 
         with AgentGraphPlanner(
@@ -210,7 +316,19 @@ class LongConspectWriterPipeline(BasePipeline):
             return new_path
 
     # Добавить в utils или создать новую папку хз
-    def convert_json_to_md(self, path):
+    def convert_json_to_md(self, path: str | os.PathLike) -> Path:
+        """Преобразует синтезированный JSON-конспект в Markdown.
+
+        Args:
+            path (str | os.PathLike): Путь к JSON синтезированного конспекта.
+
+        Returns:
+            Path: Путь к артефакту Markdown-конспекта для планирования графиков.
+
+        Raises:
+            OSError: Если входной JSON невозможно прочитать или Markdown невозможно сохранить.
+            json.JSONDecodeError: Если JSON конспекта невалиден.
+        """
         with open(path, "r", encoding="utf-8") as file:
             conspect = json.load(file)
 
@@ -242,8 +360,16 @@ class LongConspectWriterPipeline(BasePipeline):
 
     @check_path_is
     def _call_grapher(self, path: str | os.PathLike) -> str | os.PathLike:
-        """
-        Генерирует графики для конспекта.
+        """Генерирует артефакты изображений графиков для плейсхолдеров конспекта.
+
+        Args:
+            path (str | os.PathLike): Путь к Markdown с плейсхолдерами графиков.
+
+        Returns:
+            str | os.PathLike: Путь к JSON результата генерации графиков.
+
+        Raises:
+            Exception: Пробрасывает ошибки генерации графиков.
         """
         from src.agents.agent_grapher import AgentGrapher
 
@@ -265,9 +391,20 @@ class LongConspectWriterPipeline(BasePipeline):
         tag_close: str = "]",
         tag_meat: str = "[GRAPH_TYPE:",
     ) -> list[tuple[int, int, str]]:
-        """
-        Ищет все теги [GRAPH_TYPE: ...] с учетом вложенности скобок.
-        Возвращает список кортежей (индекс_начала, индекс_конца, сам_текст_тега).
+        """Ищет плейсхолдеры графиков в конспекте с поддержкой вложенных скобок.
+
+        Args:
+            conspect (str): Текст Markdown-конспекта, созданный graph planner.
+            tag_open (str): Opening bracket token for graph placeholder scanning.
+            tag_close (str): Closing bracket token for graph placeholder scanning.
+            tag_meat (str): Prefix that marks a graph placeholder.
+
+        Returns:
+            list[tuple[int, int, str]]: Placeholder start index, end index, and
+            surrounding context text.
+
+        Raises:
+            Exception: Намеренно не выбрасывает исключения.
         """
         graphs = []
         char_open_count = 0
@@ -294,6 +431,22 @@ class LongConspectWriterPipeline(BasePipeline):
     def add_graph_in_conspect(
         self, graphs_path: str | os.PathLike, conspect_md_path: str
     ) -> str | os.PathLike:
+        """Заменяет плейсхолдеры графиков в Markdown на теги сгенерированных изображений.
+
+        Args:
+            graphs_path (str | os.PathLike): Путь к JSON результата генерации графиков
+                из ``AgentGrapher``.
+            conspect_md_path (str): Путь к Markdown-конспекту, содержащему
+                плейсхолдеры графиков.
+
+        Returns:
+            str | os.PathLike: Путь к финальному Markdown со ссылками на графики.
+
+        Raises:
+            OSError: Если JSON графиков, изображения или Markdown невозможно прочитать/записать.
+            json.JSONDecodeError: Если JSON результата графиков невалиден.
+            KeyError: Если в записях результата графиков нет ожидаемых полей.
+        """
         graphs_file_path = Path(graphs_path)
         with open(graphs_file_path, "r", encoding="utf-8") as file:
             graphs = json.load(file)
@@ -316,15 +469,16 @@ class LongConspectWriterPipeline(BasePipeline):
                 # Ищем картинку там же, где лежит JSON, а не в новой пустой сессии
                 absolute_image_path = graphs_base_dir / value["path"]
                 image_name = value["name_graph"]
-                formated_image_name = image_name.split("___")[1].replace("_", " ").replace(".png", "")
+                formated_image_name = (
+                    image_name.split("___")[1].replace("_", " ").replace(".png", "")
+                )
 
                 if absolute_image_path.exists():
                     destination_path = final_assets_dir / absolute_image_path.name
                     shutil.copy2(absolute_image_path, destination_path)
 
                     markdown_valid_path = f"assets/{absolute_image_path.name}"
-                    replacement = f"""<div align='center'><img src='{markdown_valid_path}' width='700'><br><p>{formated_image_name}</p></div>
-"""
+                    replacement = f"<div align='center'><img src='{markdown_valid_path}' width='700'><br><p>{formated_image_name}</p></div>"
                 else:
                     logger.error(f"Файл не найден при сборке: {absolute_image_path}")
                     replacement = (
@@ -346,12 +500,18 @@ class LongConspectWriterPipeline(BasePipeline):
         return out_filepath
 
     def run(self, audio_file_path: str | os.PathLike) -> str | None:
-        """
-        Главный оркестратор полного пайплайна: аудио → конспект.
-        Этапы: STT → локальная кластеризация → планирование →
-            глобальная кластеризация → компрессия → синтез.
-        Вход (audio_file_path): Путь к аудиофайлу лекции.
-        Выход: Путь к итоговому конспекту. None если пайплайн не вернул результат.
+        """Запускает полный последовательный пайплайн от аудио к конспекту.
+
+        Args:
+            audio_file_path (str | os.PathLike): Путь к аудио или видео лекции,
+                с которого начинается пайплайн.
+
+        Returns:
+            str | None: Путь к финальному Markdown-конспекту с графиками или ``None``,
+            если проверяемый этап неожиданно не вернул путь.
+
+        Raises:
+            Exception: Пробрасывает ошибки любого строгого этапа пайплайна.
         """
         transcript_path = self._call_stt(audio_file_path)
 

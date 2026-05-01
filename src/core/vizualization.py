@@ -1,14 +1,35 @@
+"""Вспомогательные визуализаторы кластеров для диагностики LongConspectWriter.
+
+Визуализаторы сохраняют графики локальной и глобальной кластеризации в папку
+активного запуска, не участвуя в передаче данных между этапами пайплайна.
+"""
+
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.decomposition import PCA
 import numpy as np
 from src.core.base import BaseClusterVisualizer
 from loguru import logger
+from typing import Any
 
 
 class LocalClusterVisualizer(BaseClusterVisualizer):
-    def run(self, labels: np.ndarray, metadata: dict = None):
-        """Отрисовка хронологической гистограммы локальных кластеров."""
+    """Отрисовывает хронологическое распределение локальных кластеров."""
+
+    def run(self, labels: np.ndarray, metadata: dict[str, Any] | None = None) -> None:
+        """Отрисовка хронологической гистограммы локальных кластеров.
+
+        Args:
+            labels (np.ndarray): Final local-cluster labels in transcript order.
+            metadata (dict[str, Any] | None): Опциональные метаданные этапа, записываемые
+                как watermark на диагностическом графике.
+
+        Returns:
+            None: График сохраняется в директорию текущей сессии.
+
+        Raises:
+            OSError: Если график невозможно сохранить.
+        """
         cluster_sizes = {}
         for label in labels:
             label = int(label)
@@ -29,14 +50,34 @@ class LocalClusterVisualizer(BaseClusterVisualizer):
 
 
 class GlobalClusterVisualizer(BaseClusterVisualizer):
+    """Отрисовывает семантическую проекцию локальных кластеров по глобальным главам."""
+
     def run(
         self,
         embeddings: np.ndarray,
-        assignments: list,
-        chapter_titles: list,
-        metadata: dict = None,
-    ):
-        """Отрисовка 2D PCA проекции привязки абзацев к главам."""
+        assignments: list[int],
+        chapter_titles: list[str],
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Отрисовка 2D PCA проекции привязки абзацев к главам.
+
+        Args:
+            embeddings (np.ndarray): Embeddings локальных кластеров, созданные во время
+                глобального распределения.
+            assignments (list[int]): Индекс главы, назначенный каждому локальному
+                кластеру.
+            chapter_titles (list[str]): Упорядоченные заголовки глобальных глав из
+                артефакта планировщика.
+            metadata (dict[str, Any] | None): Опциональные метаданные этапа, записываемые
+                как watermark на диагностическом графике.
+
+        Returns:
+            None: График сохраняется или пропускается, если доступно меньше двух embeddings.
+
+        Raises:
+            OSError: Если график невозможно сохранить.
+            ValueError: Если PCA не может обработать переданные embeddings.
+        """
         if len(embeddings) < 2:
             logger.warning("Слишком мало данных для PCA проекции.")
             return

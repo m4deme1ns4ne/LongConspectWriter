@@ -1,3 +1,9 @@
+"""Агенты планирования для LongConspectWriter.
+
+Локальный планировщик превращает локальные кластеры в микротемы, а глобальный
+планировщик сворачивает эти микротемы в план глав для глобальной кластеризации.
+"""
+
 from loguru import logger
 from tqdm import tqdm
 import sys
@@ -6,14 +12,42 @@ from pathlib import Path
 from src.core.utils import ColoursForTqdm
 import json
 import ast
+from typing import Any
 
 
 class AgentLocalPlanner(BaseLlamaCppAgent):
-    def __init__(self, session_dir: Path, **kwargs):
+    """Генерирует черновики локальных микротем из хронологических кластеров."""
+
+    def __init__(self, session_dir: Path, **kwargs: Any) -> None:
+        """Инициализирует локальный планировщик для сессии пайплайна.
+
+        Args:
+            session_dir (Path): Директория текущей сессии пайплайна.
+            **kwargs (Any): LLM configuration passed to ``BaseLlamaCppAgent``.
+
+        Returns:
+            None: Планировщик сохраняет состояние сессии и модели.
+
+        Raises:
+            Exception: Пробрасывает ошибки инициализации базового агента.
+        """
         self.session_dir = session_dir
         super().__init__(**kwargs)
 
-    def run(self, path: Path) -> str:
+    def run(self, path: str | Path) -> Path:
+        """Генерирует плоский локальный план из JSON локальных кластеров.
+
+        Args:
+            path (str | Path): Путь к артефакту локальных кластеров.
+
+        Returns:
+            Path: Путь к сохраненному артефакту локального плана для глобального планировщика.
+
+        Raises:
+            OSError: Если нет доступа к входным или выходным артефактам.
+            json.JSONDecodeError: Если артефакт локальных кластеров содержит невалидный JSON.
+            Exception: Пробрасывает ошибки генерации LLM.
+        """
         with open(path, "r", encoding="utf-8") as file:
             local_clusters = json.load(file)
 
@@ -70,11 +104,40 @@ class AgentLocalPlanner(BaseLlamaCppAgent):
 
 
 class AgentGlobalPlanner(BaseLlamaCppAgent):
-    def __init__(self, session_dir: Path, **kwargs):
+    """Сворачивает локальные микротемы в структурированный глобальный план глав."""
+
+    def __init__(self, session_dir: Path, **kwargs: Any) -> None:
+        """Инициализирует глобальный планировщик для сессии пайплайна.
+
+        Args:
+            session_dir (Path): Директория текущей сессии пайплайна.
+            **kwargs (Any): LLM configuration passed to ``BaseLlamaCppAgent``.
+
+        Returns:
+            None: Планировщик сохраняет состояние сессии и модели.
+
+        Raises:
+            Exception: Пробрасывает ошибки инициализации базового агента.
+        """
         self.session_dir = session_dir
         super().__init__(**kwargs)
 
-    def run(self, path: Path) -> str:
+    def run(self, path: str | Path) -> Path:
+        """Генерирует глобальный план глав из артефакта локального плана.
+
+        Args:
+            path (str | Path): Путь к артефакту локального планировщика, содержащему
+                ``answer_agent``.
+
+        Returns:
+            Path: Путь к сохраненному JSON глобального плана для глобальной кластеризации.
+
+        Raises:
+            OSError: Если нет доступа к входным, schema- или выходным артефактам.
+            KeyError: Если в локальном плане нет ``answer_agent``.
+            ValueError: Если ответ LLM невозможно разобрать через ``ast``.
+            Exception: Пробрасывает ошибки генерации LLM.
+        """
         with open(path, "r", encoding="utf-8") as file:
             local_plan = json.load(file)
 

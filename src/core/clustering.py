@@ -1,3 +1,10 @@
+"""Этапы семантической кластеризации для пайплайна LongConspectWriter.
+
+Модуль преобразует транскрипт в хронологические локальные кластеры, а затем
+сопоставляет их с главами из глобального плана. Контракт пайплайна сохраняется:
+результат каждого этапа сохраняется, а наружу возвращается путь к артефакту.
+"""
+
 import json
 import torch
 import numpy as np
@@ -5,6 +12,11 @@ from pathlib import Path
 from loguru import logger
 from sentence_transformers import SentenceTransformer, util
 from sklearn.cluster import AgglomerativeClustering
+from src.configs.configs import (
+    GlobalClusterizerInitConfig,
+    LocalClusterizerGenConfig,
+    LocalClusterizerInitConfig,
+)
 
 import matplotlib
 
@@ -16,12 +28,48 @@ from src.core.vizualization import LocalClusterVisualizer, GlobalClusterVisualiz
 
 
 class SemanticLocalClusterizer(BaseLocalClusterizer):
-    def __init__(self, init_config, gen_config, session_dir: Path):
+    """Строит хронологические семантические кластеры из сырого транскрипта."""
+
+    def __init__(
+        self,
+        init_config: LocalClusterizerInitConfig,
+        gen_config: LocalClusterizerGenConfig,
+        session_dir: Path,
+    ) -> None:
+        """Инициализирует модель sentence embeddings для локального этапа.
+
+        Args:
+            init_config (LocalClusterizerInitConfig): Настройки embedding-модели
+                для локальной кластеризации.
+            gen_config (LocalClusterizerGenConfig): Параметры агломеративной кластеризации
+                для хронологических чанков транскрипта.
+            session_dir (Path): Директория текущей сессии пайплайна.
+
+        Returns:
+            None: Кластеризатор сохраняет конфиг и загруженную embedding-модель.
+
+        Raises:
+            Exception: Пробрасывает ошибки загрузки SentenceTransformer.
+        """
         self.session_dir = session_dir
         super().__init__(init_config, gen_config)
         self.model = SentenceTransformer(self._init_config.model_name)
 
-    def run(self, path):
+    def run(self, path: str | Path) -> Path:
+        """Кластеризует предложения транскрипта и сохраняет JSON локальных кластеров.
+
+        Args:
+            path (str | Path): Путь к STT-артефакту с текстом
+                ``answer_agent``.
+
+        Returns:
+            Path: Путь к сохраненному артефакту локальных кластеров для планирования.
+
+        Raises:
+            OSError: Если файл транскрипта невозможно прочитать или сохранить выход.
+            KeyError: Если в JSON транскрипта нет ``answer_agent``.
+            json.JSONDecodeError: Если артефакт транскрипта содержит невалидный JSON.
+        """
         with open(path, "r", encoding="utf-8") as file:
             transcrib = json.load(file)
 
@@ -73,7 +121,28 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
 
         return out_filepath
 
-    def _format_cluster_output(self, sentences, raw_labels, min_sentences=5):
+    def _format_cluster_output(
+        self,
+        sentences: list[str],
+        raw_labels: np.ndarray,
+        min_sentences: int = 5,
+    ) -> tuple[dict[int, str], np.ndarray]:
+        """Преобразует сырые метки кластеризации в упорядоченные текстовые кластеры.
+
+        Args:
+            sentences (list[str]): Transcript sentences in lecture order.
+            raw_labels (np.ndarray): Raw labels returned by agglomerative
+                clustering.
+            min_sentences (int): Minimum sentence count before a chunk can be
+                closed as its own local cluster.
+
+        Returns:
+            tuple[dict[int, str], np.ndarray]: Cluster text keyed by cluster
+            и финальная последовательность меток для визуализации.
+
+        Raises:
+            IndexError: Если ``raw_labels`` пустой при вызове форматирования.
+        """
         chunks = []
         current_chunk = []
         current_label = raw_labels[0]
@@ -103,12 +172,45 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
 
 
 class SemanticGlobalClusterizer(BaseGlobalClusterizer):
-    def __init__(self, init_config, session_dir: Path):
+    """Назначает локальные кластеры заголовкам глав из глобального плана."""
+
+    def __init__(
+        self, init_config: GlobalClusterizerInitConfig, session_dir: Path
+    ) -> None:
+        """Инициализирует embedding-модель для глобального распределения кластеров.
+
+        Args:
+            init_config (GlobalClusterizerInitConfig): Настройки embedding-модели
+                для выравнивания с глобальными главами.
+            session_dir (Path): Директория текущей сессии пайплайна.
+
+        Returns:
+            None: Кластеризатор сохраняет конфиг и загруженную embedding-модель.
+
+        Raises:
+            Exception: Пробрасывает ошибки загрузки SentenceTransformer.
+        """
         self.session_dir = session_dir
         super().__init__(init_config)
         self.model = SentenceTransformer(self._init_config.model_name)
 
-    def run(self, plan_path, local_clusters_path):
+    def run(self, plan_path: str | Path, local_clusters_path: str | Path) -> Path:
+        """Сопоставляет локальные кластеры с глобальными кластерами уровня глав.
+
+        Args:
+            plan_path (str | Path): Путь к JSON глобального плана с записями
+                ``chapters``.
+            local_clusters_path (str | Path): Путь к JSON локальных кластеров из
+                ``SemanticLocalClusterizer``.
+
+        Returns:
+            Path: Путь к сохраненному артефакту глобальных кластеров для синтеза.
+
+        Raises:
+            OSError: Если входные артефакты невозможно прочитать или сохранить выход.
+            KeyError: Если в глобальном плане нет ожидаемых полей глав.
+            json.JSONDecodeError: Если входной артефакт содержит невалидный JSON.
+        """
 
         with open(plan_path, "r", encoding="utf-8") as file:
             global_plan = json.load(file)

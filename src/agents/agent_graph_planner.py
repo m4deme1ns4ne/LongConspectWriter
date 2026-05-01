@@ -1,3 +1,9 @@
+"""Агент планирования графиков для Markdown-конспекта LongConspectWriter.
+
+Агент просматривает синтезированный Markdown-конспект, спрашивает LLM, где
+визуализации полезны, и вставляет плейсхолдеры графиков для этапа grapher.
+"""
+
 from loguru import logger
 from tqdm import tqdm
 import sys
@@ -6,24 +12,73 @@ from pathlib import Path
 import json
 from src.core.utils import ColoursForTqdm, TextsSplitter, modify_retry
 import difflib
+from typing import Any, Optional
 
 
 class AgentGraphPlanner(BaseLlamaCppAgent):
-    def __init__(self, session_dir: Path, **kwargs):
+    """Добавляет плейсхолдеры графиков в Markdown-конспект."""
+
+    def __init__(self, session_dir: Path, **kwargs: Any) -> None:
+        """Инициализирует планирование графиков со схемой структурированного вывода.
+
+        Args:
+            session_dir (Path): Директория текущей сессии пайплайна.
+            **kwargs (Any): LLM configuration passed to ``BaseLlamaCppAgent``.
+
+        Returns:
+            None: Планировщик сохраняет сессию, модель и состояние формата ответа.
+
+        Raises:
+            OSError: Если схему ответа невозможно загрузить.
+            json.JSONDecodeError: Если файл схемы содержит невалидный JSON.
+            Exception: Пробрасывает ошибки инициализации базового агента.
+        """
         self.session_dir = session_dir
         super().__init__(**kwargs)
         with open(self._app_config.scheme_output_path, "r", encoding="utf-8") as file:
             scheme_output = json.load(file)
         self.response_format = {"type": "json_object", "schema": scheme_output}
 
-    def _format_output(self, user_prompt):
+    def _format_output(self, user_prompt: str) -> list[dict[str, str]]:
+        """Форматирует prompt планирования графиков как одно пользовательское сообщение.
+
+        Args:
+            user_prompt (str): Пользовательский prompt, построенный из чанка Markdown-конспекта.
+
+        Returns:
+            list[dict[str, str]]: Chat prompt для llama.cpp.
+
+        Raises:
+            Exception: Намеренно не выбрасывает исключения.
+        """
         combined_prompt = f"{self.system_prompt}\n\n{user_prompt}"
         return [{"role": "user", "content": combined_prompt}]
 
     @modify_retry
     def create_graph_place_holder(
-        self, conspect_chunk: str, conspect_theme: str, path_with_output: str
-    ) -> dict:
+        self,
+        conspect_chunk: str,
+        conspect_theme: Optional[str],
+        path_with_output: str | Path,
+    ) -> dict[str, Any]:
+        """Просит LLM проанализировать один чанк конспекта на возможности для графиков.
+
+        Args:
+            conspect_chunk (str): Markdown-чанк из синтезированного конспекта.
+            conspect_theme (str): Lecture theme used as additional graph
+                planning context.
+            path_with_output (str): JSONL path where raw LLM responses are
+                appended for auditability.
+
+        Returns:
+            dict[str, Any]: Распарсенный ответ анализа графиков, обычно со списком
+            ``analysis``.
+
+        Raises:
+            json.JSONDecodeError: Если ответ LLM не является валидным JSON.
+            OSError: Если сырой ответ невозможно дописать на диск.
+            Exception: Пробрасывает ошибки генерации LLM после ретраев.
+        """
         with tqdm(
             total=self._gen_config.max_tokens,
             desc="Генерация токенов для чанка",
@@ -48,7 +103,20 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
             f.write(response)
         return json.loads(response)
 
-    def normalizing_text(self, text: str):
+    def normalizing_text(self, text: str) -> tuple[str, list[int]]:
+        """Нормализует текст для нечеткого сопоставления цитат с сохранением индексов.
+
+        Args:
+            text (str): Conspect or quoted text participating in placeholder
+                placement.
+
+        Returns:
+            tuple[str, list[int]]: Нормализованный текст и карта из нормализованных
+            позиций обратно в исходные индексы текста.
+
+        Raises:
+            Exception: Намеренно не выбрасывает исключения.
+        """
         junk_chars = set(" \t\n\r\\{}_^$.,:;-—()[]")
         chars = []
         index_map = []
@@ -60,8 +128,21 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
         return "".join(chars), index_map
 
     def _apply_graphs_to_markdown(
-        self, conspect_md: str, analysis_results: list
+        self, conspect_md: str, analysis_results: list[dict[str, Any]]
     ) -> str:
+        """Вставляет плейсхолдеры графиков после найденных цитат в Markdown.
+
+        Args:
+            conspect_md (str): Полный текст Markdown-конспекта.
+            analysis_results (list[dict[str, Any]]): Graph planner responses for
+                each conspect chunk.
+
+        Returns:
+            str: Markdown-текст со вставленными тегами плейсхолдеров графиков.
+
+        Raises:
+            KeyError: Если в выбранном элементе анализа нет обязательного ``quote``.
+        """
         for analys in analysis_results:
             for item in analys.get("analysis", []):
                 if str(item.get("decision")).lower() == "true":
@@ -108,7 +189,23 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
                         )
         return conspect_md
 
-    def run(self, conspect_md_path: str, conspect_theme: str = None) -> str:
+    def run(
+        self, conspect_md_path: str | Path, conspect_theme: Optional[str] = None
+    ) -> Path:
+        """Планирует плейсхолдеры графиков для синтезированного Markdown-конспекта.
+
+        Args:
+            conspect_md_path (str | Path): Путь к Markdown-конспекту.
+            conspect_theme (Optional[str]): Опциональная тема лекции, передаваемая в
+                prompt планирования графиков.
+
+        Returns:
+            Path: Путь к Markdown с тегами плейсхолдеров графиков.
+
+        Raises:
+            OSError: Если нет доступа к входному или выходному Markdown.
+            Exception: Пробрасывает ошибки разбиения текста или генерации LLM.
+        """
         with open(conspect_md_path, "r", encoding="utf-8") as file:
             conspect_md = file.read()
         conspect_chunks = TextsSplitter.split_text_to_tokens(
