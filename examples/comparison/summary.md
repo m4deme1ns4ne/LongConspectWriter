@@ -1,4 +1,4 @@
-# Comparison: Conspectius vs Gemini
+# Comparison: LongConspectWriter vs Gemini
 
 **Датасет:** [10 лекций](../dataset.md) из открытых русскоязычных образовательных курсов.  
 **Методология оценки:** LLM-as-a-judge по 5 парадигмам (P1–P5). Промпт судьи: [llm-as-a-judge](../llm-as-a-judge/prompt_llm-as-a-judge.md).
@@ -9,7 +9,7 @@
 
 ## Сводные оценки (avg)
 
-| #  | Тема | Домен | Лекция | Conspectius | Gemini |
+| #  | Тема | Домен | Лекция | LongConspectWriter | Gemini |
 |---:|------|-------|:------:|:-----------:|:------:|
 | 1  | Введение. Базовые конструкции Python | Алгоритмы | [▶](https://www.youtube.com/watch?v=KdZ4HF1SrFs) | — | — |
 | 2  | Алгебра логики. Ветвления | Алгоритмы | [▶](https://www.youtube.com/watch?v=ZgSx3yH7sJI) | — | — |
@@ -26,7 +26,7 @@
 
 ## Детализация по парадигмам
 
-### Conspectius
+### LongConspectWriter
 
 | #  | Тема | P1 | P2 | P3 | P4a | P4b | P5 | Avg |
 |---:|------|----|----|----|:---:|:---:|----|-----|
@@ -65,9 +65,9 @@
     comparison/
     ├── summary.md                    ← этот файл
     ├── lecture_01/                   ← Введение. Базовые конструкции Python
-    │   ├── conspectius_conspect.md
+    │   ├── lcw_conspect.md
     │   ├── gemini_conspect.md
-    │   ├── conspectius_scores.json
+    │   ├── lcw_scores.json
     │   └── gemini_scores.json
     ├── lecture_02/                   ← Алгебра логики. Ветвления
     ├── lecture_03/                   ← Введение. Основные понятия и обозначения
