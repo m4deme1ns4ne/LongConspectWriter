@@ -39,9 +39,6 @@ class AgentGrapher(BaseLlamaCppAgent):
 
         Returns:
             None: Grapher сохраняет сессию, callback и состояние модели.
-
-        Raises:
-            Exception: Пробрасывает ошибки инициализации базового агента.
         """
         self.session_dir = session_dir
         self.getting_graphs_from_conspect = getting_graphs_from_conspect_func
@@ -60,9 +57,6 @@ class AgentGrapher(BaseLlamaCppAgent):
 
         Returns:
             str: Сырой ответ LLM, который должен содержать блок Python-кода.
-
-        Raises:
-            Exception: Пробрасывает ошибки генерации LLM.
         """
         with tqdm(
             total=self._gen_config.max_tokens,
@@ -101,9 +95,6 @@ class AgentGrapher(BaseLlamaCppAgent):
         Returns:
             bool | tuple[bool, str]: Результат исходной ветки или флаг успешности вместе
             с диагностическим текстом в формате stderr.
-
-        Raises:
-            OSError: Если невозможно записать сгенерированный скрипт.
         """
         match = re.search(r"```python\n(.*?)\n```", code, re.DOTALL)
         if not match:
@@ -181,9 +172,6 @@ class AgentGrapher(BaseLlamaCppAgent):
 
         Returns:
             bool: Было ли изображение графика успешно сгенерировано.
-
-        Raises:
-            Exception: Пробрасывает ошибки генерации или записи скрипта.
         """
         is_success = False
         bad_code = self._app_config.bad_code
@@ -234,10 +222,6 @@ class AgentGrapher(BaseLlamaCppAgent):
 
         Returns:
             str: Путь к JSON, который связывает плейсхолдеры со сгенерированными изображениями.
-
-        Raises:
-            OSError: Если нет доступа к входному Markdown или выходным артефактам.
-            Exception: Пробрасывает ошибки генерации графиков.
         """
         with open(path, "r", encoding="utf-8") as file:
             conspect = file.read()

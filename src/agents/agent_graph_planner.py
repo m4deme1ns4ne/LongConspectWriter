@@ -12,7 +12,7 @@ from pathlib import Path
 import json
 from src.core.utils import ColoursForTqdm, TextsSplitter, modify_retry
 import difflib
-from typing import Any, Optional
+from typing import Any
 
 
 class AgentGraphPlanner(BaseLlamaCppAgent):
@@ -23,15 +23,10 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
 
         Args:
             session_dir (Path): Директория текущей сессии пайплайна.
-            **kwargs (Any): LLM configuration passed to ``BaseLlamaCppAgent``.
+            **kwargs (Any): Конфигурация LLM, передаваемая в ``BaseLlamaCppAgent``.
 
         Returns:
             None: Планировщик сохраняет сессию, модель и состояние формата ответа.
-
-        Raises:
-            OSError: Если схему ответа невозможно загрузить.
-            json.JSONDecodeError: Если файл схемы содержит невалидный JSON.
-            Exception: Пробрасывает ошибки инициализации базового агента.
         """
         self.session_dir = session_dir
         super().__init__(**kwargs)
@@ -47,9 +42,6 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
 
         Returns:
             list[dict[str, str]]: Chat prompt для llama.cpp.
-
-        Raises:
-            Exception: Намеренно не выбрасывает исключения.
         """
         combined_prompt = f"{self.system_prompt}\n\n{user_prompt}"
         return [{"role": "user", "content": combined_prompt}]
@@ -58,26 +50,21 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
     def create_graph_place_holder(
         self,
         conspect_chunk: str,
-        conspect_theme: Optional[str],
+        conspect_theme: str | None,
         path_with_output: str | Path,
     ) -> dict[str, Any]:
         """Просит LLM проанализировать один чанк конспекта на возможности для графиков.
 
         Args:
             conspect_chunk (str): Markdown-чанк из синтезированного конспекта.
-            conspect_theme (str): Lecture theme used as additional graph
-                planning context.
-            path_with_output (str): JSONL path where raw LLM responses are
-                appended for auditability.
+            conspect_theme (str | None): Тема лекции, используемая как дополнительный
+                контекст для планирования графиков.
+            path_with_output (str | Path): Путь JSONL, куда дописываются сырые ответы LLM
+                для контроля.
 
         Returns:
             dict[str, Any]: Распарсенный ответ анализа графиков, обычно со списком
             ``analysis``.
-
-        Raises:
-            json.JSONDecodeError: Если ответ LLM не является валидным JSON.
-            OSError: Если сырой ответ невозможно дописать на диск.
-            Exception: Пробрасывает ошибки генерации LLM после ретраев.
         """
         with tqdm(
             total=self._gen_config.max_tokens,
@@ -107,15 +94,11 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
         """Нормализует текст для нечеткого сопоставления цитат с сохранением индексов.
 
         Args:
-            text (str): Conspect or quoted text participating in placeholder
-                placement.
+            text (str): Текст конспекта или цитаты, участвующей в расстановке плейсхолдеров.
 
         Returns:
             tuple[str, list[int]]: Нормализованный текст и карта из нормализованных
             позиций обратно в исходные индексы текста.
-
-        Raises:
-            Exception: Намеренно не выбрасывает исключения.
         """
         junk_chars = set(" \t\n\r\\{}_^$.,:;-—()[]")
         chars = []
@@ -134,14 +117,11 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
 
         Args:
             conspect_md (str): Полный текст Markdown-конспекта.
-            analysis_results (list[dict[str, Any]]): Graph planner responses for
-                each conspect chunk.
+            analysis_results (list[dict[str, Any]]): Ответы graph planner для
+                каждого чанка конспекта.
 
         Returns:
             str: Markdown-текст со вставленными тегами плейсхолдеров графиков.
-
-        Raises:
-            KeyError: Если в выбранном элементе анализа нет обязательного ``quote``.
         """
         for analys in analysis_results:
             for item in analys.get("analysis", []):
@@ -190,21 +170,17 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
         return conspect_md
 
     def run(
-        self, conspect_md_path: str | Path, conspect_theme: Optional[str] = None
+        self, conspect_md_path: str | Path, conspect_theme: str | None = None
     ) -> Path:
         """Планирует плейсхолдеры графиков для синтезированного Markdown-конспекта.
 
         Args:
             conspect_md_path (str | Path): Путь к Markdown-конспекту.
-            conspect_theme (Optional[str]): Опциональная тема лекции, передаваемая в
+            conspect_theme (str | None): Опциональная тема лекции, передаваемая в
                 prompt планирования графиков.
 
         Returns:
             Path: Путь к Markdown с тегами плейсхолдеров графиков.
-
-        Raises:
-            OSError: Если нет доступа к входному или выходному Markdown.
-            Exception: Пробрасывает ошибки разбиения текста или генерации LLM.
         """
         with open(conspect_md_path, "r", encoding="utf-8") as file:
             conspect_md = file.read()

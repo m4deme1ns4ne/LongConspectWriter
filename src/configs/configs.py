@@ -32,11 +32,7 @@ class STTInitConfig:
     def __post_init__(self) -> None:
         """Заполняет устройство и тип вычислений по умолчанию для транскрибации.
 
-        Returns:
-            None: Отсутствующие значения записываются в экземпляр конфига.
-
-        Raises:
-            Exception: Does not raise intentionally.
+        Изменяет поля ``device`` и ``compute_type`` экземпляра конфига на месте.
         """
         if self.device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -62,9 +58,6 @@ class STTGenConfig:
 
         Returns:
             None: VAD-настройки в виде dict преобразуются в ``VadParametersConfig``.
-
-        Raises:
-            TypeError: Если переданные VAD-поля не соответствуют dataclass.
         """
         if isinstance(self.vad_parameters, dict):
             self.vad_parameters = VadParametersConfig(**self.vad_parameters)
@@ -96,11 +89,6 @@ class LLMInitConfig:
 
         Returns:
             None: Экземпляр конфига валидируется на месте.
-
-        Raises:
-            ValueError: Если не настроен ни локальный путь модели, ни пара HuggingFace
-                ``repo_id``/``filename``.
-            OSError: Если директорию кеша моделей невозможно создать.
         """
         if not self.path_to_load_models.exists():
             self.path_to_load_models.mkdir(parents=True, exist_ok=True)
@@ -138,12 +126,12 @@ class LLMAppConfig:
     name_stage_dir: str
     chunk_size_ratio: float | None = None
     chunk_overlap_ratio: float | None = None
-    last_tail_words_count: int = None
-    scheme_output_path: dict = None
-    error_massage: str = None
-    bad_code: str = None
-    re_try_count: int = None
-    step_temperature: float = None
+    last_tail_words_count: int | None = None
+    scheme_output_path: dict[str, Any] | None = None
+    error_massage: str | None = None
+    bad_code: str | None = None
+    re_try_count: int | None = None
+    step_temperature: float | None = None
     available_lib: str | None = None
 
 

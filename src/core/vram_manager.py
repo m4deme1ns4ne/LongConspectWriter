@@ -5,8 +5,6 @@
 пайплайна.
 """
 
-from typing import Optional
-
 from loguru import logger
 import gc
 import torch
@@ -22,9 +20,6 @@ class VRamUsage:
 
         Returns:
             tuple[float, float, float]: Значения использованной, свободной и общей VRAM в МБ.
-
-        Raises:
-            pynvml.NVMLError: Обрабатывается внутри функции и представляется в виде нулевых значений.
         """
         try:
             pynvml.nvmlInit()
@@ -46,19 +41,15 @@ class VRamCleaner:
     """Очищает память Python и CUDA после завершения этапа агентом."""
 
     @staticmethod
-    def empty_vram(caller_name: Optional[str] = None) -> None:
+    def empty_vram(caller_name: str | None = None) -> None:
         """Освобождает кешированную CUDA-память для только что завершившего агента.
 
         Args:
-            caller_name (Optional[str]): Имя агента LongConspectWriter или
+            caller_name (str | None): Имя агента LongConspectWriter или
                 этапа, запросившего очистку. Используется только для диагностического логирования.
 
         Returns:
             None: Метод выполняет очистку и пишет логи.
-
-        Raises:
-            Exception: Обрабатывается внутри, потому что очистка не должна прерывать
-                последовательный пайплайн после того, как этап создал выход.
         """
         owner = caller_name or "unknown"
         gc.collect()

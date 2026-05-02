@@ -23,27 +23,15 @@ class LongConspectWriterPipeline(BasePipeline):
         """Инициализирует запуск пайплайна и создает директорию сессии.
 
         Args:
-            session_config (PipelineSessionConfig): Fully loaded configuration
-                for every LongConspectWriter stage.
+            session_config (PipelineSessionConfig): Полностью загруженная конфигурация
+                для каждого этапа LongConspectWriter.
 
         Returns:
             None: Пайплайн сохраняет конфиг и состояние активной сессии.
-
-        Raises:
-            OSError: Если выходную директорию сессии невозможно создать.
         """
         self.config = session_config
         self.pipeline_config = self.config.pipeline
         self.__post_init__()
-
-    # @check_path_is
-    # def _call_stt(self, path: Path) -> Path | None:
-    #     with FasterWhisper(
-    #         self.stt_init_config, self.stt_gen_config, self.stt_app_config
-    #     ) as model:
-    #         result_path = model.run(audio_file_path=path)
-
-    #     return result_path
 
     def _run_stt_process(
         self, path: str | os.PathLike, result_queue: multiprocessing.Queue
@@ -51,15 +39,12 @@ class LongConspectWriterPipeline(BasePipeline):
         """Запускает STT в изолированном процессе и публикует путь результата.
 
         Args:
-            path (str | os.PathLike): Source lecture audio/video path.
-            result_queue (multiprocessing.Queue): Queue used to return status
-                и путь транскрипта в родительский процесс пайплайна.
+            path (str | os.PathLike): Путь к исходному аудио или видеофайлу лекции.
+            result_queue (multiprocessing.Queue): Очередь для возврата статуса
+                и пути транскрипта в родительский процесс пайплайна.
 
         Returns:
             None: Метод записывает словарь статуса в ``result_queue``.
-
-        Raises:
-            Exception: Обрабатывается внутри и сериализуется в очередь.
         """
         try:
             from src.core.stt import FasterWhisper
@@ -84,10 +69,6 @@ class LongConspectWriterPipeline(BasePipeline):
 
         Returns:
             str: Путь к сырому артефакту транскрипта, созданному STT.
-
-        Raises:
-            RuntimeError: Если изолированный STT-процесс сообщает об ошибке или завершается
-                без возврата результата.
         """
         logger.info("Запуск STT агента в изолированном процессе...")
         result_queue = multiprocessing.Queue()
@@ -118,9 +99,6 @@ class LongConspectWriterPipeline(BasePipeline):
 
         Returns:
             str | os.PathLike: Путь к локальным кластерам для этапов планирования.
-
-        Raises:
-            Exception: Пробрасывает ошибки локальной кластеризации.
         """
         from src.core.clustering import SemanticLocalClusterizer
 
@@ -141,9 +119,6 @@ class LongConspectWriterPipeline(BasePipeline):
 
         Returns:
             str | os.PathLike: Путь к Markdown-артефакту со всеми микротемами лекции.
-
-        Raises:
-            Exception: Пробрасывает ошибки генерации или сохранения локального планировщика.
         """
         from src.agents.agent_planner import AgentLocalPlanner
 
@@ -170,9 +145,6 @@ class LongConspectWriterPipeline(BasePipeline):
         Returns:
             str | os.PathLike: Путь к JSON глобального плана с заголовками
             и описаниями глав.
-
-        Raises:
-            Exception: Пробрасывает ошибки генерации или сохранения глобального планировщика.
         """
         from src.agents.agent_planner import AgentGlobalPlanner
 
@@ -198,9 +170,6 @@ class LongConspectWriterPipeline(BasePipeline):
 
         Returns:
             str | os.PathLike: Путь к артефакту глобального плана.
-
-        Raises:
-            Exception: Пробрасывает ошибки этапов планирования.
         """
         local_clusters_path = self._call_local_planner(path)
         new_path = self._call_global_planner(local_clusters_path)
@@ -221,9 +190,6 @@ class LongConspectWriterPipeline(BasePipeline):
 
         Returns:
             str | os.PathLike: Путь к глобальным кластерам для синтеза.
-
-        Raises:
-            Exception: Пробрасывает ошибки глобальной кластеризации.
         """
         from src.core.clustering import SemanticGlobalClusterizer
 
@@ -246,9 +212,6 @@ class LongConspectWriterPipeline(BasePipeline):
 
         Returns:
             str | os.PathLike: Путь к глобальным кластерам, разбитым по глобальным темам.
-
-        Raises:
-            Exception: Пробрасывает ошибки этапов кластеризации или планирования.
         """
         local_clusters_path = self._call_local_clustering(path)
         plan_path = self._call_planner(local_clusters_path)
@@ -268,9 +231,6 @@ class LongConspectWriterPipeline(BasePipeline):
 
         Returns:
             str | os.PathLike: Путь к JSON синтезированного конспекта.
-
-        Raises:
-            Exception: Пробрасывает ошибки синтезатора или extractor.
         """
         from src.agents.agent_synthesizer import AgentSynthesizerLlama
 
@@ -299,9 +259,6 @@ class LongConspectWriterPipeline(BasePipeline):
 
         Returns:
             str | os.PathLike: Путь к Markdown с плейсхолдерами графиков.
-
-        Raises:
-            Exception: Пробрасывает ошибки graph planner.
         """
         from src.agents.agent_graph_planner import AgentGraphPlanner
 
@@ -315,7 +272,7 @@ class LongConspectWriterPipeline(BasePipeline):
             new_path = graph_planner.run(path)
             return new_path
 
-    # Добавить в utils или создать новую папку хз
+    @check_path_is
     def convert_json_to_md(self, path: str | os.PathLike) -> Path:
         """Преобразует синтезированный JSON-конспект в Markdown.
 
@@ -324,10 +281,6 @@ class LongConspectWriterPipeline(BasePipeline):
 
         Returns:
             Path: Путь к артефакту Markdown-конспекта для планирования графиков.
-
-        Raises:
-            OSError: Если входной JSON невозможно прочитать или Markdown невозможно сохранить.
-            json.JSONDecodeError: Если JSON конспекта невалиден.
         """
         with open(path, "r", encoding="utf-8") as file:
             conspect = json.load(file)
@@ -367,9 +320,6 @@ class LongConspectWriterPipeline(BasePipeline):
 
         Returns:
             str | os.PathLike: Путь к JSON результата генерации графиков.
-
-        Raises:
-            Exception: Пробрасывает ошибки генерации графиков.
         """
         from src.agents.agent_grapher import AgentGrapher
 
@@ -395,16 +345,13 @@ class LongConspectWriterPipeline(BasePipeline):
 
         Args:
             conspect (str): Текст Markdown-конспекта, созданный graph planner.
-            tag_open (str): Opening bracket token for graph placeholder scanning.
-            tag_close (str): Closing bracket token for graph placeholder scanning.
-            tag_meat (str): Prefix that marks a graph placeholder.
+            tag_open (str): Токен открывающей скобки при сканировании плейсхолдеров.
+            tag_close (str): Токен закрывающей скобки при сканировании плейсхолдеров.
+            tag_meat (str): Префикс, маркирующий плейсхолдер графика.
 
         Returns:
-            list[tuple[int, int, str]]: Placeholder start index, end index, and
-            surrounding context text.
-
-        Raises:
-            Exception: Намеренно не выбрасывает исключения.
+            list[tuple[int, int, str]]: Начальный индекс, конечный индекс плейсхолдера
+            и окружающий контекстный текст.
         """
         graphs = []
         char_open_count = 0
@@ -427,7 +374,7 @@ class LongConspectWriterPipeline(BasePipeline):
                         graphs.append((idx_start, i, conspect[left_bound:right_bound]))
         return graphs
 
-    # Добавить в utils или создать новую папку хз
+    @check_path_is
     def add_graph_in_conspect(
         self, graphs_path: str | os.PathLike, conspect_md_path: str
     ) -> str | os.PathLike:
@@ -441,11 +388,6 @@ class LongConspectWriterPipeline(BasePipeline):
 
         Returns:
             str | os.PathLike: Путь к финальному Markdown со ссылками на графики.
-
-        Raises:
-            OSError: Если JSON графиков, изображения или Markdown невозможно прочитать/записать.
-            json.JSONDecodeError: Если JSON результата графиков невалиден.
-            KeyError: Если в записях результата графиков нет ожидаемых полей.
         """
         graphs_file_path = Path(graphs_path)
         with open(graphs_file_path, "r", encoding="utf-8") as file:
@@ -499,6 +441,7 @@ class LongConspectWriterPipeline(BasePipeline):
 
         return out_filepath
 
+    @check_path_is
     def run(self, audio_file_path: str | os.PathLike) -> str | None:
         """Запускает полный последовательный пайплайн от аудио к конспекту.
 
@@ -509,9 +452,6 @@ class LongConspectWriterPipeline(BasePipeline):
         Returns:
             str | None: Путь к финальному Markdown-конспекту с графиками или ``None``,
             если проверяемый этап неожиданно не вернул путь.
-
-        Raises:
-            Exception: Пробрасывает ошибки любого строгого этапа пайплайна.
         """
         transcript_path = self._call_stt(audio_file_path)
 

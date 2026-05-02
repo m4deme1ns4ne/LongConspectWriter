@@ -23,13 +23,10 @@ class AgentLocalPlanner(BaseLlamaCppAgent):
 
         Args:
             session_dir (Path): Директория текущей сессии пайплайна.
-            **kwargs (Any): LLM configuration passed to ``BaseLlamaCppAgent``.
+            **kwargs (Any): Конфигурация LLM, передаваемая в ``BaseLlamaCppAgent``.
 
         Returns:
             None: Планировщик сохраняет состояние сессии и модели.
-
-        Raises:
-            Exception: Пробрасывает ошибки инициализации базового агента.
         """
         self.session_dir = session_dir
         super().__init__(**kwargs)
@@ -42,11 +39,6 @@ class AgentLocalPlanner(BaseLlamaCppAgent):
 
         Returns:
             Path: Путь к сохраненному артефакту локального плана для глобального планировщика.
-
-        Raises:
-            OSError: Если нет доступа к входным или выходным артефактам.
-            json.JSONDecodeError: Если артефакт локальных кластеров содержит невалидный JSON.
-            Exception: Пробрасывает ошибки генерации LLM.
         """
         with open(path, "r", encoding="utf-8") as file:
             local_clusters = json.load(file)
@@ -111,13 +103,10 @@ class AgentGlobalPlanner(BaseLlamaCppAgent):
 
         Args:
             session_dir (Path): Директория текущей сессии пайплайна.
-            **kwargs (Any): LLM configuration passed to ``BaseLlamaCppAgent``.
+            **kwargs (Any): Конфигурация LLM, передаваемая в ``BaseLlamaCppAgent``.
 
         Returns:
             None: Планировщик сохраняет состояние сессии и модели.
-
-        Raises:
-            Exception: Пробрасывает ошибки инициализации базового агента.
         """
         self.session_dir = session_dir
         super().__init__(**kwargs)
@@ -131,12 +120,6 @@ class AgentGlobalPlanner(BaseLlamaCppAgent):
 
         Returns:
             Path: Путь к сохраненному JSON глобального плана для глобальной кластеризации.
-
-        Raises:
-            OSError: Если нет доступа к входным, schema- или выходным артефактам.
-            KeyError: Если в локальном плане нет ``answer_agent``.
-            ValueError: Если ответ LLM невозможно разобрать через ``ast``.
-            Exception: Пробрасывает ошибки генерации LLM.
         """
         with open(path, "r", encoding="utf-8") as file:
             local_plan = json.load(file)

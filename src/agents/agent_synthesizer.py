@@ -32,17 +32,14 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
 
         Args:
             session_dir (Path): Директория текущей сессии пайплайна.
-            extractor_gen_config (LLMGenConfig): Generation settings for the
-                per-chunk extractor helper.
-            extractor_app_config (LLMAppConfig): App settings and schema paths
+            extractor_gen_config (LLMGenConfig): Параметры генерации для
+                extractor-помощника на каждый чанк.
+            extractor_app_config (LLMAppConfig): Настройки приложения и пути схем
                 для extractor-помощника.
-            **kwargs (Any): LLM configuration passed to ``BaseLlamaCppAgent``.
+            **kwargs (Any): Конфигурация LLM, передаваемая в ``BaseLlamaCppAgent``.
 
         Returns:
             None: Синтезатор сохраняет сессию, модель и конфиг extractor.
-
-        Raises:
-            Exception: Пробрасывает ошибки инициализации базового агента.
         """
         self.session_dir = session_dir
         self.extractor_gen_config = extractor_gen_config
@@ -64,15 +61,12 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
         Args:
             chunk (str): Текстовый чанк из текущего глобального кластера.
             topik (str): Заголовок текущей глобальной темы.
-            already_seen_themes (set[str]): Entities already extracted from
-                previous synthesized chunks.
+            already_seen_themes (set[str]): Сущности, уже извлеченные из
+                предыдущих синтезированных чанков.
             last_tail (str): Хвост предыдущего сгенерированного чанка для связности.
 
         Returns:
             str: Синтезированный текст конспекта для чанка.
-
-        Raises:
-            Exception: Пробрасывает ошибки генерации LLM.
         """
         with tqdm(
             total=self._gen_config.max_tokens,
@@ -118,16 +112,13 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
         Args:
             split_clusters (list[str]): Токен-размерные чанки текста темы.
             topik (str): Заголовок текущей глобальной темы.
-            conspect (dict[str, list[str]]): Mutable conspect accumulator keyed
-                by topic title.
-            already_seen_themes (set[str]): Mutable context of extracted terms
-                shared across synthesized chunks.
+            conspect (dict[str, list[str]]): Изменяемый аккумулятор конспекта
+                с ключом по заголовку темы.
+            already_seen_themes (set[str]): Изменяемый контекст извлеченных терминов,
+                общий для всех синтезированных чанков.
 
         Returns:
             None: Аккумуляторы конспекта и контекста обновляются на месте.
-
-        Raises:
-            Exception: Пробрасывает ошибки синтезатора или extractor.
         """
         extractor = _AgentExtractor(
             init_config=self._init_config,
@@ -172,11 +163,6 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
 
         Returns:
             Path: Путь к JSON-артефакту синтезированного конспекта.
-
-        Raises:
-            OSError: Если нет доступа к входным или выходным артефактам.
-            json.JSONDecodeError: Если глобальные кластеры не являются валидным JSON.
-            Exception: Пробрасывает ошибки разбиения, генерации или извлечения.
         """
         with open(path, "r", encoding="utf-8") as file:
             global_clusters = json.load(file)

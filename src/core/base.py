@@ -28,14 +28,13 @@ from pathlib import Path
 from datetime import datetime
 import matplotlib.pyplot as plt
 import time
-from dataclasses import asdict
 
 
 class Trackable:
     """Mixin, который логирует время выполнения метода ``run`` у подкласса.
 
-    The mixin is used by LongConspectWriter stages to observe sequential stage
-    без изменения реализации этапа.
+    Используется этапами LongConspectWriter для наблюдения за последовательными этапами
+    без изменения реализации самого этапа.
     """
 
     def __init_subclass__(cls: type["Trackable"], **kwargs: Any) -> None:
@@ -46,9 +45,6 @@ class Trackable:
 
         Returns:
             None: Подкласс изменяется на месте, если он определяет ``run``.
-
-        Raises:
-            Exception: Пробрасывает ошибки из ``object.__init_subclass__``.
         """
         super().__init_subclass__(**kwargs)
         if "run" in cls.__dict__:
@@ -68,9 +64,6 @@ class Base(ABC):
 
         Returns:
             Any: Результат конкретного этапа, обычно путь к следующему артефакту.
-
-        Raises:
-            NotImplementedError: Реализуется конкретными этапами пайплайна.
         """
         pass
 
@@ -86,9 +79,6 @@ class Base(ABC):
 
         Returns:
             Path: Полный путь, куда этап должен сохранить свой артефакт.
-
-        Raises:
-            OSError: Если директорию этапа невозможно создать.
         """
         actual_stage_path = session_dir / stage
 
@@ -120,10 +110,6 @@ class Base(ABC):
 
         Returns:
             Path: Путь сохраненного артефакта, передаваемый между этапами пайплайна.
-
-        Raises:
-            OSError: Если выходной файл невозможно записать.
-            TypeError: Если JSON-выход невозможно сериализовать.
         """
         output_file_path = self._get_output_file_path(
             session_dir=session_dir, stage=stage, file_name=file_name
@@ -150,8 +136,8 @@ class Base(ABC):
 class BaseAgent(Trackable, Base):
     """Базовый класс для агентов, владеющих моделью.
 
-    The context-manager protocol releases model and tokenizer attributes after
-    после завершения этапа агента, чтобы следующий этап мог переиспользовать GPU-память.
+    Протокол контекст-менеджера освобождает атрибуты модели и токенизатора после
+    завершения этапа агента, чтобы следующий этап мог переиспользовать GPU-память.
     """
 
     def __enter__(self) -> "BaseAgent":
@@ -159,9 +145,6 @@ class BaseAgent(Trackable, Base):
 
         Returns:
             BaseAgent: Активный экземпляр агента.
-
-        Raises:
-            Exception: Намеренно не выбрасывает исключения.
         """
         return self
 
@@ -174,18 +157,15 @@ class BaseAgent(Trackable, Base):
         """Освобождает ресурсы принадлежащей агенту модели при выходе из этапа.
 
         Args:
-            exc_type (type[BaseException] | None): Exception type raised inside
+            exc_type (type[BaseException] | None): Тип исключения, выброшенного внутри
                 контекста этапа, если оно было.
-            exc_val (BaseException | None): Exception instance raised inside the
-                stage context, if any.
+            exc_val (BaseException | None): Экземпляр исключения, выброшенного внутри
+                контекста этапа, если оно было.
             exc_tb (TracebackType | None): Traceback, возникший внутри
                 контекста этапа, если он был.
 
         Returns:
             None: Очистка выполняется для моделей, которыми агент владеет.
-
-        Raises:
-            Exception: Ошибки очистки обрабатываются ``VRamCleaner``.
         """
         if getattr(self, "_owns_model", True):
             logger.debug(f"Очистка памяти от агента {self.__class__.__name__}...")
@@ -210,13 +190,10 @@ class BaseLLMAgent(BaseAgent):
         Args:
             prompt (Any): Структура prompt, подготовленная из текущего артефакта
                 пайплайна.
-            **kwargs (Any): Agent-specific generation controls.
+            **kwargs (Any): Параметры генерации, специфичные для агента.
 
         Returns:
             str: Сгенерированный моделью текст.
-
-        Raises:
-            NotImplementedError: Реализуется конкретными LLM-агентами.
         """
         pass
 
@@ -226,9 +203,6 @@ class BaseLLMAgent(BaseAgent):
 
         Returns:
             Any: Структура prompt, ожидаемая конкретным backend модели.
-
-        Raises:
-            NotImplementedError: Реализуется конкретными LLM-агентами.
         """
         pass
 
@@ -249,20 +223,15 @@ class BaseLlamaCppAgent(BaseLLMAgent):
         Args:
             init_config (LLMInitConfig): Конфигурация загрузки модели для этого
                 этапа агента.
-            gen_config (LLMGenConfig): Generation parameters used by this
-                agent stage.
-            app_config (LLMAppConfig): Pipeline-facing agent configuration,
-                including prompt paths and agent names.
+            gen_config (LLMGenConfig): Параметры генерации для данного этапа агента.
+            app_config (LLMAppConfig): Конфигурация агента со стороны пайплайна,
+                включая пути к промптам и имена агентов.
             lecture_theme (str): Тема лекции, используемая для выбора system prompt.
-            shared_model (Llama | None): Already loaded model reused by this
-                агентом, когда владение должно остаться вне экземпляра.
+            shared_model (Llama | None): Уже загруженная модель, переданная агенту
+                повторно, когда владение должно остаться вне экземпляра.
 
         Returns:
             None: Инициализированный агент сохраняет состояние модели и prompt.
-
-        Raises:
-            OSError: Если локальную модель или файлы prompt невозможно загрузить.
-            KeyError: Если отсутствуют обязательные ключи prompt.
         """
         super().__init__()
         self._init_config = init_config
@@ -346,9 +315,6 @@ class BaseLlamaCppAgent(BaseLLMAgent):
 
         Returns:
             list[dict[str, str]]: Chat-сообщения с ролями system и user.
-
-        Raises:
-            KeyError: Если обязательный ключ шаблона отсутствует в ``kwargs``.
         """
         user_prompt = self.user_template.format(**kwargs)
         if tokenizer is not None:
@@ -369,10 +335,7 @@ class BaseLlamaCppAgent(BaseLLMAgent):
                 этапа пайплайна.
 
         Returns:
-            list[dict[str, str]]: Two-message chat prompt for llama.cpp.
-
-        Raises:
-            Exception: Намеренно не выбрасывает исключения.
+            list[dict[str, str]]: Двухсообщенный chat prompt для llama.cpp.
         """
         return [
             {"role": "system", "content": self.system_prompt},
@@ -401,9 +364,6 @@ class BaseLlamaCppAgent(BaseLLMAgent):
 
         Returns:
             str: Сгенерированное содержимое assistant.
-
-        Raises:
-            Exception: Пробрасывает ошибки генерации модели после retry-попыток.
         """
 
         if logit_bias is None:
@@ -456,10 +416,6 @@ class BaseSTTAgent(BaseAgent):
 
         Returns:
             None: Инициализированный агент сохраняет состояние модели и prompt.
-
-        Raises:
-            OSError: Если модель или файлы prompt невозможно загрузить.
-            KeyError: Если отсутствуют обязательные секции prompt.
         """
         super().__init__()
         self._init_config = init_config
@@ -512,13 +468,10 @@ class BaseLocalClusterizer(Trackable, Base):
         Args:
             init_config (LocalClusterizerInitConfig): Настройки embedding-модели
                 для локальной кластеризации.
-            gen_config (LocalClusterizerGenConfig): Local clustering parameters.
+            gen_config (LocalClusterizerGenConfig): Параметры локальной кластеризации.
 
         Returns:
             None: Конфигурация сохраняется для конкретных кластеризаторов.
-
-        Raises:
-            Exception: Намеренно не выбрасывает исключения.
         """
         super().__init__()
         self._init_config = init_config
@@ -535,14 +488,11 @@ class BaseGlobalClusterizer(Trackable, Base):
         """Сохраняет конфигурацию глобального кластеризатора.
 
         Args:
-            init_config (GlobalClusterizerInitConfig): Embedding model settings
+            init_config (GlobalClusterizerInitConfig): Настройки embedding-модели,
                 используемой для выравнивания локальных кластеров с глобальным планом.
 
         Returns:
             None: Конфигурация сохраняется для конкретных кластеризаторов.
-
-        Raises:
-            Exception: Намеренно не выбрасывает исключения.
         """
         super().__init__()
         self._init_config = init_config
@@ -556,9 +506,6 @@ class BasePipeline(Trackable, Base):
 
         Returns:
             None: Директория активной сессии сохраняется в экземпляре.
-
-        Raises:
-            OSError: Если директорию запуска невозможно создать.
         """
 
         output_dir = Path(self.pipeline_config.output_dir)
@@ -585,9 +532,6 @@ class BaseClusterVisualizer(Trackable):
 
         Returns:
             None: Визуализатор сохраняет директорию сессии.
-
-        Raises:
-            Exception: Намеренно не выбрасывает исключения.
         """
         self.session_dir = session_dir
 
@@ -600,9 +544,6 @@ class BaseClusterVisualizer(Trackable):
 
         Returns:
             None: Активная фигура matplotlib изменяется на месте.
-
-        Raises:
-            Exception: Пробрасывает ошибки рендера matplotlib.
         """
         if not metadata:
             return
@@ -624,9 +565,6 @@ class BaseClusterVisualizer(Trackable):
 
         Returns:
             None: График записывается на диск и закрывается.
-
-        Raises:
-            OSError: Если директорию или файл графика невозможно записать.
         """
         self._add_watermark(metadata)
 

@@ -47,9 +47,6 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
 
         Returns:
             None: Кластеризатор сохраняет конфиг и загруженную embedding-модель.
-
-        Raises:
-            Exception: Пробрасывает ошибки загрузки SentenceTransformer.
         """
         self.session_dir = session_dir
         super().__init__(init_config, gen_config)
@@ -64,11 +61,6 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
 
         Returns:
             Path: Путь к сохраненному артефакту локальных кластеров для планирования.
-
-        Raises:
-            OSError: Если файл транскрипта невозможно прочитать или сохранить выход.
-            KeyError: Если в JSON транскрипта нет ``answer_agent``.
-            json.JSONDecodeError: Если артефакт транскрипта содержит невалидный JSON.
         """
         with open(path, "r", encoding="utf-8") as file:
             transcrib = json.load(file)
@@ -130,18 +122,14 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
         """Преобразует сырые метки кластеризации в упорядоченные текстовые кластеры.
 
         Args:
-            sentences (list[str]): Transcript sentences in lecture order.
-            raw_labels (np.ndarray): Raw labels returned by agglomerative
-                clustering.
-            min_sentences (int): Minimum sentence count before a chunk can be
-                closed as its own local cluster.
+            sentences (list[str]): Предложения транскрипта в хронологическом порядке лекции.
+            raw_labels (np.ndarray): Сырые метки, возвращенные агломеративной кластеризацией.
+            min_sentences (int): Минимальное число предложений до закрытия чанка
+                в отдельный локальный кластер.
 
         Returns:
-            tuple[dict[int, str], np.ndarray]: Cluster text keyed by cluster
+            tuple[dict[int, str], np.ndarray]: Текст кластеров с ключом по индексу кластера
             и финальная последовательность меток для визуализации.
-
-        Raises:
-            IndexError: Если ``raw_labels`` пустой при вызове форматирования.
         """
         chunks = []
         current_chunk = []
@@ -186,9 +174,6 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
 
         Returns:
             None: Кластеризатор сохраняет конфиг и загруженную embedding-модель.
-
-        Raises:
-            Exception: Пробрасывает ошибки загрузки SentenceTransformer.
         """
         self.session_dir = session_dir
         super().__init__(init_config)
@@ -205,11 +190,6 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
 
         Returns:
             Path: Путь к сохраненному артефакту глобальных кластеров для синтеза.
-
-        Raises:
-            OSError: Если входные артефакты невозможно прочитать или сохранить выход.
-            KeyError: Если в глобальном плане нет ожидаемых полей глав.
-            json.JSONDecodeError: Если входной артефакт содержит невалидный JSON.
         """
 
         with open(plan_path, "r", encoding="utf-8") as file:

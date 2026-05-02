@@ -23,22 +23,16 @@ class FasterWhisper(BaseSTTAgent):
         Args:
             session_dir (Path): Директория текущего запуска, где хранятся артефакты
                 транскрипта.
-            **kwargs (object): Configuration arguments forwarded to
-                ``BaseSTTAgent``.
+            **kwargs (object): Аргументы конфигурации, передаваемые в ``BaseSTTAgent``.
 
         Returns:
             None: Агент сохраняет состояние сессии и модели.
-
-        Raises:
-            Exception: Пробрасывает ошибки загрузки модели и prompt из
-                базового STT-агента.
         """
         self.session_dir = session_dir
         super().__init__(**kwargs)
 
     def run(self, audio_file_path: str | os.PathLike) -> Path:
-        """
-        Транскрибирует аудиофайл в текст.
+        """Транскрибирует аудиофайл в текст.
 
         Args:
             audio_file_path (str | os.PathLike): Путь к аудиофайлу лекции,
@@ -47,11 +41,6 @@ class FasterWhisper(BaseSTTAgent):
         Returns:
             Path: Путь к сохраненному JSON-файлу транскрипции для локальной
             кластеризации.
-
-        Raises:
-            FileNotFoundError: Если исходный аудиофайл не существует.
-            OSError: Если артефакт транскрипта невозможно сохранить.
-            Exception: Пробрасывает ошибки транскрибации FasterWhisper.
         """
         if not os.path.exists(audio_file_path):
             logger.error(f"Файл не найден: {audio_file_path}")

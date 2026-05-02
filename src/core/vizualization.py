@@ -20,15 +20,12 @@ class LocalClusterVisualizer(BaseClusterVisualizer):
         """Отрисовка хронологической гистограммы локальных кластеров.
 
         Args:
-            labels (np.ndarray): Final local-cluster labels in transcript order.
+            labels (np.ndarray): Финальные метки локальных кластеров в порядке транскрипта.
             metadata (dict[str, Any] | None): Опциональные метаданные этапа, записываемые
                 как watermark на диагностическом графике.
 
         Returns:
             None: График сохраняется в директорию текущей сессии.
-
-        Raises:
-            OSError: Если график невозможно сохранить.
         """
         cluster_sizes = {}
         for label in labels:
@@ -62,7 +59,7 @@ class GlobalClusterVisualizer(BaseClusterVisualizer):
         """Отрисовка 2D PCA проекции привязки абзацев к главам.
 
         Args:
-            embeddings (np.ndarray): Embeddings локальных кластеров, созданные во время
+            embeddings (np.ndarray): Эмбеддинги локальных кластеров, созданные во время
                 глобального распределения.
             assignments (list[int]): Индекс главы, назначенный каждому локальному
                 кластеру.
@@ -73,10 +70,6 @@ class GlobalClusterVisualizer(BaseClusterVisualizer):
 
         Returns:
             None: График сохраняется или пропускается, если доступно меньше двух embeddings.
-
-        Raises:
-            OSError: Если график невозможно сохранить.
-            ValueError: Если PCA не может обработать переданные embeddings.
         """
         if len(embeddings) < 2:
             logger.warning("Слишком мало данных для PCA проекции.")

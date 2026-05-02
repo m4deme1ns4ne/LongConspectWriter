@@ -11,7 +11,7 @@ from src.core.base import BaseLlamaCppAgent
 from pathlib import Path
 import json
 from src.core.utils import ColoursForTqdm
-from typing import Any, Optional
+from typing import Any
 
 
 class _AgentExtractor(BaseLlamaCppAgent):
@@ -22,15 +22,10 @@ class _AgentExtractor(BaseLlamaCppAgent):
 
         Args:
             session_dir (Path): Директория текущей сессии пайплайна.
-            **kwargs (Any): LLM configuration passed to ``BaseLlamaCppAgent``.
+            **kwargs (Any): Конфигурация LLM, передаваемая в ``BaseLlamaCppAgent``.
 
         Returns:
             None: Extractor сохраняет сессию, модель и формат ответа.
-
-        Raises:
-            OSError: Если схему ответа невозможно прочитать.
-            json.JSONDecodeError: Если файл схемы содержит невалидный JSON.
-            Exception: Пробрасывает ошибки инициализации базового агента.
         """
         self.session_dir = session_dir
         super().__init__(**kwargs)
@@ -38,20 +33,16 @@ class _AgentExtractor(BaseLlamaCppAgent):
             scheme_output = json.load(file)
         self.response_format = {"type": "json_object", "schema": scheme_output}
 
-    def run(self, synthesizer_chunk: Optional[str] = None) -> dict[str, Any]:
+    def run(self, synthesizer_chunk: str | None = None) -> dict[str, Any]:
         """Извлекает отслеживаемые сущности лекции из одного синтезированного чанка.
 
         Args:
-            synthesizer_chunk (Optional[str]): Текст, сгенерированный синтезатором
+            synthesizer_chunk (str | None): Текст, сгенерированный синтезатором
                 для текущего чанка темы.
 
         Returns:
             dict[str, Any]: Распарсенный ответ extractor с
             ``extracted_entities``, если они доступны.
-
-        Raises:
-            OSError: Если невозможно дописать audit-артефакт extractor.
-            Exception: Пробрасывает ошибки генерации LLM.
         """
         with tqdm(
             total=self._gen_config.max_tokens,
