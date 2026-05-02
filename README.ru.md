@@ -1,10 +1,15 @@
-# LongConspectWriter: Пайплайн для суммаризации 10 000+ токенов лекций с помощью локальных 8B LLM
+# LongConspectWriter: Structured Note-Taking from 10,000+ Token Lectures Using Local 8B LLMs
 
-[README.md in english](https://github.com/m4deme1ns4ne/LongConspectWriter/#longconspectwriter-local-multi-agent-system-for-generating-long-academic-conspect) | README.md на русском
+[README.md in english](README.md) | README.md на русском
+
+LongConspectWriter — локальная мультиагентная система для автоматического создания структурированных академических конспектов из аудио и видео лекций. Система работает полностью офлайн на потребительском GPU: транскрибирует запись, строит семантическую структуру, синтезирует конспект с определениями, теоремами и доказательствами в формате Markdown, и автоматически генерирует визуализации там, где они уместны.
+
+Проект создан в рамках ВКР и ориентирован на STEM-лекции.
 
 ## Оглавление
 
 - [Архитектура системы](#архитектура-системы)
+- [Требования](#требования)
 - [Установка и запуск](#установка-и-запуск)
 - [CLI Actions](#cli-actions)
 - [Выходные артефакты](#выходные-артефакты)
@@ -14,7 +19,7 @@
 
 ## Архитектура системы
 
-LongConspectWriter превращает аудио или видео лекции в Markdown-конспект. Пайплайн транскрибирует запись через FasterWhisper, строит локальные семантические кластеры, собирает глобальный план лекции, привязывает фрагменты транскрипта к главам и синтезирует академический JSON-конспект. Во время синтеза внутренний `AgentExtractor` обновляет контекст лекции, чтобы следующие чанки не дублировали уже извлеченные сущности и темы.
+LongConspectWriter превращает аудио или видео лекции в Markdown-конспект. Пайплайн транскрибирует запись через FasterWhisper, строит локальные семантические кластеры, собирает глобальный план лекции, привязывает фрагменты транскрипта к главам и синтезирует академический JSON-конспект. Во время синтеза внутренний `AgentExtractor` обновляет контекст лекции, чтобы следующие чанки не дублировали уже извлечённые сущности и темы.
 
 После синтеза JSON конвертируется в Markdown. Отдельный `AgentGraphPlanner` анализирует готовый Markdown и вставляет `[GRAPH_TYPE: ...]`-плейсхолдеры там, где визуализация полезна и может быть сгенерирована кодом. Затем `AgentGrapher` находит эти плейсхолдеры, генерирует Python-скрипты для визуализаций, рендерит изображения с ретраями при ошибках и сохраняет mapping графиков. Финальный этап `add_graph_in_conspect` заменяет плейсхолдеры HTML-блоками с локальными изображениями из `assets/`.
 
@@ -27,14 +32,14 @@ flowchart TD
     STT --> LCluster["Локальная кластеризация<br/>(Семантические чанки)"]
     LCluster --> LPlanner["AgentLocalPlanner<br/>(Генерация локальных тем)"]
     LPlanner --> GPlanner["AgentGlobalPlanner<br/>(Структура глав конспекта)"]
-    
+
     LCluster --> GCluster["Глобальная кластеризация<br/>(Привязка чанков к главам)"]
     GPlanner --> GCluster
 
     %% Синтез текста
     GCluster --> Synthesizer["AgentSynthesizer<br/>(Генерация текста конспекта)"]
     Synthesizer <--> Extractor["AgentExtractor<br/>(Обновление контекста/памяти)"]
-    
+
     Synthesizer --> DraftJSON["Черновик конспекта<br/>(JSON)"]
     DraftJSON --> Converter["Конвертер JSON -> MD"]
     Converter --> DraftMD["Черновик конспекта<br/>(Markdown)"]
@@ -42,9 +47,9 @@ flowchart TD
     %% Мультиагентный визуализатор
     DraftMD --> GraphPlanner["AgentGraphPlanner<br/>(Index Mapping и разметка тегами)"]
     GraphPlanner --> TaggedMD["Размеченный конспект<br/>(MD с плейсхолдерами)"]
-    
+
     TaggedMD --> Grapher["AgentGrapher<br/>(Генерация кода + ретраи + render)"]
-    
+
     Grapher --> GraphMap["Маппинг графиков<br/>(Статусы генерации в JSON)"]
     Grapher --> Images["Сгенерированные изображения<br/>(PNG)"]
 
@@ -52,7 +57,7 @@ flowchart TD
     TaggedMD --> Stitcher["Сборщик конспекта<br/>(Вставка HTML-тегов)"]
     GraphMap --> Stitcher
     Images -.-> Stitcher
-    
+
     Stitcher --> FinalMD["Финальный конспект<br/>(Готовый Markdown)"]
 ```
 
@@ -70,6 +75,18 @@ flowchart TD
 | `AgentGraphPlanner` | Анализирует готовый Markdown и вставляет `[GRAPH_TYPE: ...]`-плейсхолдеры по цитатам через нормализованный поиск. |
 | `AgentGrapher` | Генерирует Python-код визуализации, запускает его через `MPLBACKEND=Agg`, делает ретраи с повышением температуры и сохраняет mapping графиков. |
 | `add_graph_in_conspect` | Копирует успешные PNG в финальные `assets/` и заменяет плейсхолдеры HTML-блоками с изображениями. |
+
+## Требования
+
+| Компонент | Минимум | Рекомендуется |
+| --- | --- | --- |
+| GPU VRAM | 8 ГБ | 12+ ГБ |
+| RAM | 16 ГБ | 32 ГБ |
+| Python | 3.12+ | 3.12+ |
+| CUDA | 12.1 | 12.1+ |
+| Дисковое пространство | ~10 ГБ (модели) | ~20 ГБ |
+
+> Система тестировалась на NVIDIA GPU с CUDA 12.1. CPU-режим не поддерживается из-за требований к скорости инференса.
 
 ## Установка и запуск
 
@@ -89,12 +106,12 @@ url = "https://download.pytorch.org/whl/cu121"
 
 LLM-агенты поддерживают два способа загрузки GGUF:
 
-- `repo_id` + `filename` - модель скачивается через `llama_cpp.Llama.from_pretrained()` в `.models/`;
-- `model_path` - используется уже скачанный локальный файл.
+- `repo_id` + `filename` — модель скачивается через `llama_cpp.Llama.from_pretrained()` в `.models/`;
+- `model_path` — используется уже скачанный локальный файл.
 
-По текущим конфигам T-lite и Qwen Coder загружаются из HuggingFace в `.models/`. Если папки `.models/` нет, она создается автоматически.
+По текущим конфигам T-lite и Qwen Coder загружаются из HuggingFace в `.models/`. Если папки `.models/` нет, она создаётся автоматически.
 
-### Run the full pipeline
+### Запуск полного пайплайна
 
 ```bash
 uv run python __main__.py --action all --path_to_file "data/example-audio/your_lecture.mp3"
@@ -106,7 +123,7 @@ uv run python __main__.py --action all --path_to_file "data/example-audio/your_l
 STT -> local clustering -> local planner -> global planner -> global clustering -> synthesizer -> JSON to Markdown -> graph planner -> grapher -> final Markdown with images
 ```
 
-### Run individual stages pipeline
+### Запуск отдельных стадий
 
 ```bash
 uv run python __main__.py --action stt --path_to_file "data/example-audio/your_lecture.mp3"
@@ -123,7 +140,7 @@ uv run python __main__.py --action grapher --path_to_file "data/runs/YYYY.MM.DD/
 uv run python __main__.py --action add_graph_in_conspect --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/08_graph_planner/out_filepath.md" --graphs_path "data/runs/YYYY.MM.DD/HH.MM.SS/09_grapher/graphs_mapping.json"
 ```
 
-Каждый запуск CLI создает новую сессионную директорию внутри `data/runs/<date>/<time>/`. Если вы запускаете стадии вручную, передавайте пути к артефактам из нужной сессии явно.
+Каждый запуск CLI создаёт новую сессионную директорию внутри `data/runs/<date>/<time>/`. Если вы запускаете стадии вручную, передавайте пути к артефактам из нужной сессии явно.
 
 ## CLI Actions
 
@@ -155,20 +172,20 @@ data/runs/YYYY.MM.DD/HH.MM.SS/
 
 Основные stage-директории:
 
-- `01_stt/` - сырая транскрибация после FasterWhisper.
-- `02_local_clusters/` - локальные семантические кластеры.
-- `03_local_planners/` - локальные темы.
-- `04_global_planners/` - глобальный план глав.
-- `05_global_clusters/` - кластеры, привязанные к глобальным главам.
-- `05.1_extractor/` - JSONL-вывод внутреннего extractor во время синтеза.
-- `06_synthesizer/` - JSON-конспект.
-- `07_conspect_md/` - Markdown-конспект без финальной подстановки графиков.
-- `08_graph_planner/` - Markdown после вставки `[GRAPH_TYPE: ...]` и JSONL-ответы graph planner по чанкам.
-- `09_grapher/` - `graphs_mapping.json` и сгенерированные графики.
-- `09_grapher/assets/` - PNG-графики, созданные `AgentGrapher`.
-- `09_grapher/scripts/` - Python-скрипты, которыми рендерились графики.
-- `10_conspect_with_graph_md/` - финальный Markdown-конспект.
-- `10_conspect_with_graph_md/assets/` - локальные изображения, скопированные для финального Markdown.
+- `01_stt/` — сырая транскрибация после FasterWhisper.
+- `02_local_clusters/` — локальные семантические кластеры.
+- `03_local_planners/` — локальные темы.
+- `04_global_planners/` — глобальный план глав.
+- `05_global_clusters/` — кластеры, привязанные к глобальным главам.
+- `05.1_extractor/` — JSONL-вывод внутреннего extractor во время синтеза.
+- `06_synthesizer/` — JSON-конспект.
+- `07_conspect_md/` — Markdown-конспект без финальной подстановки графиков.
+- `08_graph_planner/` — Markdown после вставки `[GRAPH_TYPE: ...]` и JSONL-ответы graph planner по чанкам.
+- `09_grapher/` — `graphs_mapping.json` и сгенерированные графики.
+- `09_grapher/assets/` — PNG-графики, созданные `AgentGrapher`.
+- `09_grapher/scripts/` — Python-скрипты, которыми рендерились графики.
+- `10_conspect_with_graph_md/` — финальный Markdown-конспект.
+- `10_conspect_with_graph_md/assets/` — локальные изображения, скопированные для финального Markdown.
 
 ## Конфигурация
 
@@ -177,9 +194,9 @@ data/runs/YYYY.MM.DD/HH.MM.SS/
 | Key | Meaning |
 | --- | --- |
 | `output_dir` | Базовая папка для сессионных артефактов. По умолчанию `data/`. |
-| `lecture_theme` | Тема лекции для выбора промпта. Сейчас используется `math`; при отсутствии темы агент берет `universal`. |
+| `lecture_theme` | Тема лекции для выбора промпта. Сейчас используется `math`; при отсутствии темы агент берёт `universal`. |
 
-Конфиги агентов расположены в `src/configs/config-agents/`, конфиги кластеризации - в `src/configs/config-clusterizer/`.
+Конфиги агентов расположены в `src/configs/config-agents/`, конфиги кластеризации — в `src/configs/config-clusterizer/`.
 
 Текущая конфигурация по умолчанию:
 
@@ -205,8 +222,8 @@ data/runs/YYYY.MM.DD/HH.MM.SS/
 | Synthesizer | `src/configs/config-agents/synthesizer/config_synthesizer.yaml` | `prompt_synthesizer.yaml` |
 | Graph Planner | `src/configs/config-agents/graph_planner/config_graph_planner.yaml` | `prompt_graph_planner.yaml`, `agent_grapher_planner_scheme_output.json` |
 | Grapher | `src/configs/config-agents/grapher/config_grapher.yaml` | `prompt_grapher.yaml` |
-| Local Clusterizer | `src/configs/config-clusterizer/config_local_clusterizer.yaml` | - |
-| Global Clusterizer | `src/configs/config-clusterizer/config_global_clusterizer.yaml` | - |
+| Local Clusterizer | `src/configs/config-clusterizer/config_local_clusterizer.yaml` | — |
+| Global Clusterizer | `src/configs/config-clusterizer/config_global_clusterizer.yaml` | — |
 
 Дополнительные параметры визуализатора:
 
@@ -221,10 +238,16 @@ data/runs/YYYY.MM.DD/HH.MM.SS/
 
 ## Evaluation
 
-...
+Оценка качества конспектов проводилась с помощью LLM-судьи по 5 парадигмам академического конспектирования (подробнее — в папке [examples/llm-as-a-judge](examples/llm-as-a-judge)).
+
+Система сравнивалась с baseline: SOTA LLM (Gemini 3.1 Pro) с детальным промптом, описывающим все требования к академическому конспекту. (подробнее — в папке [examples/big_LLMS](examples/big_LLMS)).
+
+Датасет: 10 лекций из 5 предметных областей (математический анализ, машинное обучение, алгоритмы, общая биология, общая химия). Подробнее — в [examples/dataset.md](examples/dataset.md).
+
+> Результаты будут добавлены после завершения тестирования.
 
 ## Cases
 
 Примеры конспектов, сгенерированных с помощью LongConspectWriter, находятся в папке [examples](examples).
 
-Актуальные заполненные примеры находятся в папке [examples/v2.0](examples/v2.0).
+Актуальные примеры — в папке [examples/v2.0](examples/v2.0):

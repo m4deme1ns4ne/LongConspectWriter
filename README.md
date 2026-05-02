@@ -1,10 +1,15 @@
-# LongConspectWriter: A Pipeline for Summarizing 10,000+ Lecture Tokens with Local 8B LLMs
+# LongConspectWriter: Structured Note-Taking from 10,000+ Token Lectures Using Local 8B LLMs
 
-README.md in English | [README.ru.md in Russian](README.ru.md)
+README.md in English | [README.ru.md на русском](README.ru.md)
+
+LongConspectWriter is a local multi-agent system for automatically generating structured academic notes from audio and video lectures. The system runs entirely offline on a consumer GPU: it transcribes the recording, builds a semantic structure, synthesizes a note with definitions, theorems, and proofs in Markdown format, and automatically generates visualizations where appropriate.
+
+The project was created as part of a bachelor's thesis and is focused on STEM lectures.
 
 ## Table of Contents
 
 - [System Architecture](#system-architecture)
+- [Requirements](#requirements)
 - [Installation and Run](#installation-and-run)
 - [CLI Actions](#cli-actions)
 - [Output Artifacts](#output-artifacts)
@@ -71,6 +76,18 @@ flowchart TD
 | `AgentGrapher` | Generates Python visualization code, runs it with `MPLBACKEND=Agg`, retries with higher temperature, and saves the graph mapping. |
 | `add_graph_in_conspect` | Copies successful PNG files into the final `assets/` directory and replaces placeholders with HTML image blocks. |
 
+## Requirements
+
+| Component | Minimum | Recommended |
+| --- | --- | --- |
+| GPU VRAM | 8 GB | 12+ GB |
+| RAM | 16 GB | 32 GB |
+| Python | 3.12+ | 3.12+ |
+| CUDA | 12.1 | 12.1+ |
+| Disk space | ~10 GB (models) | ~20 GB |
+
+> The system was tested on NVIDIA GPUs with CUDA 12.1. CPU-only mode is not supported due to inference speed requirements.
+
 ## Installation and Run
 
 ### Dependencies
@@ -89,8 +106,8 @@ url = "https://download.pytorch.org/whl/cu121"
 
 LLM agents support two ways to load GGUF models:
 
-- `repo_id` + `filename` - the model is downloaded with `llama_cpp.Llama.from_pretrained()` into `.models/`;
-- `model_path` - an already downloaded local file is used.
+- `repo_id` + `filename` — the model is downloaded with `llama_cpp.Llama.from_pretrained()` into `.models/`;
+- `model_path` — an already downloaded local file is used.
 
 With the current configs, T-lite and Qwen Coder are loaded from HuggingFace into `.models/`. If the `.models/` directory does not exist, it is created automatically.
 
@@ -155,20 +172,20 @@ data/runs/YYYY.MM.DD/HH.MM.SS/
 
 Main stage directories:
 
-- `01_stt/` - raw transcription after FasterWhisper.
-- `02_local_clusters/` - local semantic clusters.
-- `03_local_planners/` - local topics.
-- `04_global_planners/` - global chapter outline.
-- `05_global_clusters/` - clusters assigned to global chapters.
-- `05.1_extractor/` - JSONL output from the internal extractor during synthesis.
-- `06_synthesizer/` - JSON conspect.
-- `07_conspect_md/` - Markdown conspect before final graph replacement.
-- `08_graph_planner/` - Markdown after `[GRAPH_TYPE: ...]` insertion and graph planner JSONL chunk responses.
-- `09_grapher/` - `graphs_mapping.json` and generated graphs.
-- `09_grapher/assets/` - PNG graphs created by `AgentGrapher`.
-- `09_grapher/scripts/` - Python scripts used to render graphs.
-- `10_conspect_with_graph_md/` - final Markdown conspect.
-- `10_conspect_with_graph_md/assets/` - local images copied for the final Markdown.
+- `01_stt/` — raw transcription after FasterWhisper.
+- `02_local_clusters/` — local semantic clusters.
+- `03_local_planners/` — local topics.
+- `04_global_planners/` — global chapter outline.
+- `05_global_clusters/` — clusters assigned to global chapters.
+- `05.1_extractor/` — JSONL output from the internal extractor during synthesis.
+- `06_synthesizer/` — JSON conspect.
+- `07_conspect_md/` — Markdown conspect before final graph replacement.
+- `08_graph_planner/` — Markdown after `[GRAPH_TYPE: ...]` insertion and graph planner JSONL chunk responses.
+- `09_grapher/` — `graphs_mapping.json` and generated graphs.
+- `09_grapher/assets/` — PNG graphs created by `AgentGrapher`.
+- `09_grapher/scripts/` — Python scripts used to render graphs.
+- `10_conspect_with_graph_md/` — final Markdown conspect.
+- `10_conspect_with_graph_md/assets/` — local images copied for the final Markdown.
 
 ## Configuration
 
@@ -205,8 +222,8 @@ Main configuration files:
 | Synthesizer | `src/configs/config-agents/synthesizer/config_synthesizer.yaml` | `prompt_synthesizer.yaml` |
 | Graph Planner | `src/configs/config-agents/graph_planner/config_graph_planner.yaml` | `prompt_graph_planner.yaml`, `agent_grapher_planner_scheme_output.json` |
 | Grapher | `src/configs/config-agents/grapher/config_grapher.yaml` | `prompt_grapher.yaml` |
-| Local Clusterizer | `src/configs/config-clusterizer/config_local_clusterizer.yaml` | - |
-| Global Clusterizer | `src/configs/config-clusterizer/config_global_clusterizer.yaml` | - |
+| Local Clusterizer | `src/configs/config-clusterizer/config_local_clusterizer.yaml` | — |
+| Global Clusterizer | `src/configs/config-clusterizer/config_global_clusterizer.yaml` | — |
 
 Additional visualizer parameters:
 
@@ -221,10 +238,16 @@ Additional dataclass configuration descriptions are located in `src/configs/conf
 
 ## Evaluation
 
-...
+Conspect quality was evaluated using an LLM judge across 5 academic note-taking paradigms (see [examples/llm-as-a-judge](examples/llm-as-a-judge) for prompts and verdicts).
+
+The system was compared against a baseline: SOTA LLM (Gemini 3 Pro) with a detailed prompt describing all academic note-taking requirements (see [examples/big_LLMS](examples/big_LLMS)).
+
+Dataset: 10 lectures across 5 subject domains (calculus, machine learning, algorithms, general biology, general chemistry). See [examples/dataset.md](examples/dataset.md) for details.
+
+> Results will be added after testing is complete.
 
 ## Cases
 
 Examples of conspects generated with LongConspectWriter are located in the [examples](examples) directory.
 
-Current filled examples are located in [examples/v2.0](examples/v2.0).
+Current filled examples are in [examples/v2.0](examples/v2.0):

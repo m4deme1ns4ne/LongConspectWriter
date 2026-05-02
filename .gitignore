@@ -3,6 +3,7 @@ src/tests/test_data/
 .models/
 .tasks.md
 .trash/
+examples/.dataset
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
