@@ -1,6 +1,6 @@
 # LongConspectWriter: Structured Conspect from 10,000+ Token Lectures Using Local 8B LLMs
 
-[README.md in english](README.md) | README.md на русском
+[README.md in english](https://github.com/m4deme1ns4ne/LongConspectWriter#longconspectwriter-structured-note-taking-from-10000-token-lectures-using-local-8b-llms) | README.md на русском
 
 LongConspectWriter — локальная мультиагентная система для автоматического создания структурированных академических конспектов из аудио и видео лекций. Система работает полностью офлайн на потребительском GPU: транскрибирует запись, строит семантическую структуру, синтезирует конспект с определениями, теоремами и доказательствами в формате Markdown, и автоматически генерирует визуализации там, где они уместны.
 
