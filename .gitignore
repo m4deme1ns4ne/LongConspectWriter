@@ -4,6 +4,8 @@ src/tests/test_data/
 .tasks.md
 .trash/
 examples/.dataset
+examples/comparison/run_stt.py
+examples/comparison/run_lcw.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

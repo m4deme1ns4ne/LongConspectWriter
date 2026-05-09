@@ -1,9 +1,7 @@
 # Comparison: LongConspectWriter vs Gemini
 
 **Датасет:** [10 лекций](../dataset.md) из открытых русскоязычных образовательных курсов.  
-**Методология оценки:** LLM-as-a-judge по 5 парадигмам (P1–P5). Промпт судьи: [llm-as-a-judge](../llm-as-a-judge/prompt_llm-as-a-judge.md).
-
-> Оценки заполняются после прогона LLM-судьи. Каждая папка лекции содержит конспекты и `*_scores.json` с детализацией.
+**Методология оценки:** LLM-as-a-judge по 5 парадигмам (P1–P5). Промпт судьи: [llm-as-a-judge](prompt_llm-as-a-judge.md).
 
 ---
 
@@ -11,16 +9,16 @@
 
 | #  | Тема | Домен | Лекция | LongConspectWriter | Gemini |
 |---:|------|-------|:------:|:-----------:|:------:|
-| 1  | Введение. Базовые конструкции Python | Алгоритмы | [▶](https://www.youtube.com/watch?v=KdZ4HF1SrFs) | — | — |
-| 2  | Алгебра логики. Ветвления | Алгоритмы | [▶](https://www.youtube.com/watch?v=ZgSx3yH7sJI) | — | — |
-| 3  | Введение. Основные понятия и обозначения | Машинное обучение | [▶](https://www.youtube.com/watch?v=SZkrxWhI5qM) | — | — |
-| 4  | Метрические методы классификации | Машинное обучение | [▶](https://www.youtube.com/watch?v=QIktmPA8nb0) | — | — |
-| 5  | Основные определения математического анализа | Мат. анализ | [▶](https://www.youtube.com/watch?v=m4ga7dEMvAE) | — | — |
-| 6  | Функция и её график. Мн-ва целых и рациональных чисел | Мат. анализ | [▶](https://www.youtube.com/watch?v=hgsVSHbYsKo) | — | — |
-| 7  | Определение жизни. Микро- и макроэлементы | Биология | [▶](https://www.youtube.com/watch?v=dQymynuGFh8) | — | — |
-| 8  | Биологические мембраны. Вторичные метаболиты | Биология | [▶](https://www.youtube.com/watch?v=ciA1Jx5Cy0w) | — | — |
-| 9  | Основные понятия химии | Химия | [▶](https://www.youtube.com/watch?v=8d5r394DKqM) | — | — |
-| 10 | Атом водорода и многоэлектронные атомы | Химия | [▶](https://www.youtube.com/watch?v=Rubk3p2rEYA) | — | — |
+| 1  | Введение. Базовые конструкции Python | Алгоритмы | [Ссылка](https://www.youtube.com/watch?v=KdZ4HF1SrFs) | — | — |
+| 2  | Алгебра логики. Ветвления | Алгоритмы | [Ссылка](https://www.youtube.com/watch?v=ZgSx3yH7sJI) | — | — |
+| 3  | Введение. Основные понятия и обозначения | Машинное обучение | [Ссылка](https://www.youtube.com/watch?v=SZkrxWhI5qM) | — | — |
+| 4  | Метрические методы классификации | Машинное обучение | [Ссылка](https://www.youtube.com/watch?v=QIktmPA8nb0) | — | — |
+| 5  | Основные определения математического анализа | Мат. анализ | [Ссылка](https://www.youtube.com/watch?v=m4ga7dEMvAE) | — | — |
+| 6  | Функция и её график. Мн-ва целых и рациональных чисел | Мат. анализ | [Ссылка](https://www.youtube.com/watch?v=hgsVSHbYsKo) | — | — |
+| 7  | Определение жизни. Микро- и макроэлементы | Биология | [Ссылка](https://www.youtube.com/watch?v=dQymynuGFh8) | — | — |
+| 8  | Биологические мембраны. Вторичные метаболиты | Биология | [Ссылка](https://www.youtube.com/watch?v=ciA1Jx5Cy0w) | — | — |
+| 9  | Основные понятия химии | Химия | [Ссылка](https://www.youtube.com/watch?v=8d5r394DKqM) | — | — |
+| 10 | Атом водорода и многоэлектронные атомы | Химия | [Ссылка](https://www.youtube.com/watch?v=Rubk3p2rEYA) | — | — |
 
 ---
 
@@ -65,6 +63,8 @@
     comparison/
     ├── summary.md                    ← этот файл
     ├── lecture_01/                   ← Введение. Базовые конструкции Python
+    │   ├── meta.json
+    │   ├── transcript.txt
     │   ├── lcw_conspect.md
     │   ├── gemini_conspect.md
     │   ├── lcw_scores.json
