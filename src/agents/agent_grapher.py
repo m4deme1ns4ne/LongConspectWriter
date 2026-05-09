@@ -60,7 +60,7 @@ class AgentGrapher(BaseLlamaCppAgent):
         """
         with tqdm(
             total=self._gen_config.max_tokens,
-            desc=f"Генерация кода для {target_image_path.name[:10]}",
+            desc=f"Генерация кода для {target_image_path.name[:10]}...",
             unit="токен",
             colour=ColoursForTqdm.fourth_level,
             leave=False,

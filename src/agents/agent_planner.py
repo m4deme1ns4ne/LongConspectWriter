@@ -11,7 +11,6 @@ from src.core.base import BaseLlamaCppAgent
 from pathlib import Path
 from src.core.utils import ColoursForTqdm
 import json
-import ast
 from typing import Any
 
 
@@ -84,7 +83,7 @@ class AgentLocalPlanner(BaseLlamaCppAgent):
             f"Генерация локальных заголовков завершена. Кол-во локальных заголовков: {len(final_drafts)}. Кол-во пропущенный заголовков: {ignored_chunks}"
         )
 
-        full_local_plan = "\nЗаголовок: ".join(final_drafts)
+        full_local_plan = "\n".join(final_drafts)
         response_dict = {"answer_agent": full_local_plan}
         out_filepath = self._safe_result_out_line(
             output=response_dict,
@@ -148,7 +147,7 @@ class AgentGlobalPlanner(BaseLlamaCppAgent):
             )
         logger.info("Генерация глобальных заголовков завершена.")
 
-        response_dict = ast.literal_eval(response)
+        response_dict = json.loads(response)
 
         out_filepath = self._safe_result_out_line(
             output=response_dict,

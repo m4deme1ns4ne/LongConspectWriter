@@ -1,9 +1,12 @@
 {
-  "extracted_entities": [
-    "предел функции",
-    "теорема коши",
-    "закон сохранения энергии",
-    "полиморфизм",
-    "цикл кребса"
-  ]
+  "type": "object",
+  "properties": {
+    "extracted_entities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["extracted_entities"]
 }

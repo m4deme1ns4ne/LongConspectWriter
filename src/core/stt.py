@@ -4,7 +4,6 @@
 транскрипта и возвращает его путь следующему этапу кластеризации.
 """
 
-
 import os
 import sys
 from pathlib import Path

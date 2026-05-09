@@ -10,7 +10,7 @@ import torch
 import numpy as np
 from pathlib import Path
 from loguru import logger
-from sentence_transformers import SentenceTransformer, util
+import sentence_transformers
 from sklearn.cluster import AgglomerativeClustering
 from src.configs.configs import (
     GlobalClusterizerInitConfig,
@@ -50,7 +50,9 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
         """
         self.session_dir = session_dir
         super().__init__(init_config, gen_config)
-        self.model = SentenceTransformer(self._init_config.model_name)
+        self.model = sentence_transformers.SentenceTransformer(
+            self._init_config.model_name
+        )
 
     def run(self, path: str | Path) -> Path:
         """Кластеризует предложения транскрипта и сохраняет JSON локальных кластеров.
@@ -177,7 +179,9 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
         """
         self.session_dir = session_dir
         super().__init__(init_config)
-        self.model = SentenceTransformer(self._init_config.model_name)
+        self.model = sentence_transformers.SentenceTransformer(
+            self._init_config.model_name
+        )
 
     def run(self, plan_path: str | Path, local_clusters_path: str | Path) -> Path:
         """Сопоставляет локальные кластеры с глобальными кластерами уровня глав.
@@ -214,7 +218,9 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
         )
 
         global_clusters = {key: [] for key in chapter_titles}
-        scores = util.cos_sim(local_clusters_embeddings, global_plan_embeddings)
+        scores = sentence_transformers.util.cos_sim(
+            local_clusters_embeddings, global_plan_embeddings
+        )
         _, assignments_tensor = torch.max(scores, dim=1)
         assignments = assignments_tensor.tolist()
 

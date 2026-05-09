@@ -1,8 +1,21 @@
 {
-  "chapters": [
-    {
-      "chapter_title": "Название главы",
-      "description": "Связный текст из 2-3 предложений, описывающий содержание этой макро-темы."
+  "type": "object",
+  "properties": {
+    "chapters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "chapter_title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": ["chapter_title", "description"]
+      }
     }
-  ]
+  },
+  "required": ["chapters"]
 }

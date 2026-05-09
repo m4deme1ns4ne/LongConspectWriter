@@ -127,7 +127,7 @@ class LLMAppConfig:
     chunk_size_ratio: float | None = None
     chunk_overlap_ratio: float | None = None
     last_tail_words_count: int | None = None
-    scheme_output_path: dict[str, Any] | None = None
+    scheme_output_path: str | os.PathLike | None = None
     error_massage: str | None = None
     bad_code: str | None = None
     re_try_count: int | None = None

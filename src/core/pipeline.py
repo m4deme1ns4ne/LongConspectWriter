@@ -14,6 +14,7 @@ from src.configs.configs import PipelineSessionConfig
 import json
 import shutil
 from pathlib import Path
+import markdown
 
 
 class LongConspectWriterPipeline(BasePipeline):
@@ -442,6 +443,113 @@ class LongConspectWriterPipeline(BasePipeline):
         return out_filepath
 
     @check_path_is
+    def convert_md_to_pdf(self, path: str | os.PathLike) -> Path:
+        """Конвертирует финальный Markdown-конспект в PDF с поддержкой LaTeX и графиков.
+
+        Args:
+            path (str | os.PathLike): Путь к финальному Markdown-конспекту.
+
+        Returns:
+            Path: Путь к сгенерированному PDF-артефакту.
+        """
+        import playwright.sync_api
+
+        md_path = Path(path).resolve()
+        md_text = md_path.read_text(encoding="utf-8")
+
+        body = markdown.markdown(
+            md_text,
+            extensions=["extra", "codehilite", "tables", "fenced_code"],
+        )
+
+        html = f"""<!DOCTYPE html>
+    <html lang="ru">
+    <head>
+    <meta charset="utf-8">
+    <script>
+    window.MathJax = {{
+    tex: {{
+        inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+        displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
+    }},
+    startup: {{
+        pageReady: () => MathJax.startup.defaultPageReady().then(() => {{
+        window.mathJaxDone = true;
+        }})
+    }}
+    }};
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+    body {{
+        font-family: 'Segoe UI', 'DejaVu Sans', sans-serif;
+        max-width: 800px;
+        margin: 2em auto;
+        line-height: 1.6;
+        padding: 0 1em;
+    }}
+    pre {{ background: #f4f4f4; padding: 1em; border-radius: 4px; overflow-x: auto; }}
+    code {{ background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }}
+    pre code {{ background: transparent; padding: 0; }}
+    img {{ max-width: 100%; height: auto; }}
+    table {{ border-collapse: collapse; }}
+    th, td {{ border: 1px solid #ccc; padding: 6px 12px; }}
+    h1, h2, h3 {{ page-break-after: avoid; }}
+    pre, table, img {{ page-break-inside: avoid; }}
+    </style>
+    </head>
+    <body>
+    {body}
+    </body>
+    </html>"""
+
+        stage_name = "11_conspect_pdf"
+        pdf_dir = self.actual_session_dir / stage_name
+        pdf_dir.mkdir(parents=True, exist_ok=True)
+        pdf_path = pdf_dir / "final_conspect.pdf"
+
+        base_url = md_path.parent.as_uri() + "/"
+
+        with playwright.sync_api.sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            page.goto(base_url, wait_until="domcontentloaded")
+            page.set_content(html, wait_until="networkidle")
+            page.evaluate("""
+                            () => new Promise((resolve, reject) => {
+                                let attempts = 0;
+                                const maxAttempts = 100; // 10 секунд (100 * 100ms)
+                                
+                                const check = () => {
+                                    if (window.mathJaxDone) {
+                                        resolve();
+                                    } else if (attempts >= maxAttempts) {
+                                        reject(new Error("Таймаут: MathJax не отрендерил формулы за 10 секунд. Проверьте CDN или интернет."));
+                                    } else {
+                                        attempts++;
+                                        setTimeout(check, 100);
+                                    }
+                                };
+                                check();
+                            })
+                        """)
+            page.pdf(
+                path=str(pdf_path),
+                format="A4",
+                margin={
+                    "top": "20mm",
+                    "bottom": "20mm",
+                    "left": "15mm",
+                    "right": "15mm",
+                },
+                print_background=True,
+            )
+            browser.close()
+
+        logger.success(f"PDF сгенерирован: {pdf_path}")
+        return pdf_path
+
+    @check_path_is
     def run(self, audio_file_path: str | os.PathLike) -> str | None:
         """Запускает полный последовательный пайплайн от аудио к конспекту.
 
@@ -469,4 +577,6 @@ class LongConspectWriterPipeline(BasePipeline):
             graphs_path=graphs_path, conspect_md_path=conspect_md_path
         )
 
-        return conspect_with_graph
+        pdf_path = self.convert_md_to_pdf(conspect_with_graph)
+
+        return pdf_path

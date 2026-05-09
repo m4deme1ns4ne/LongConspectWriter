@@ -110,6 +110,80 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
             index_map.append(i)
         return "".join(chars), index_map
 
+    @staticmethod
+    def _collect_unsafe_ranges(text: str) -> list[tuple[int, int]]:
+        """Возвращает список (start, end) диапазонов внутри парных структур Markdown/LaTeX."""
+        ranges = []
+        i = 0
+        n = len(text)
+        while i < n:
+            if text[i : i + 3] == "```":
+                end = text.find("```", i + 3)
+                if end != -1:
+                    ranges.append((i, end + 3))
+                    i = end + 3
+                else:
+                    i += 3
+            elif text[i : i + 2] == "$$":
+                end = text.find("$$", i + 2)
+                if end != -1:
+                    ranges.append((i, end + 2))
+                    i = end + 2
+                else:
+                    i += 2
+            elif text[i] == "$":
+                end = text.find("$", i + 1)
+                if end != -1:
+                    ranges.append((i, end + 1))
+                    i = end + 1
+                else:
+                    i += 1
+            elif text[i] == "`":
+                end = text.find("`", i + 1)
+                if end != -1:
+                    ranges.append((i, end + 1))
+                    i = end + 1
+                else:
+                    i += 1
+            elif (
+                text[i] == "<"
+                and i + 1 < n
+                and (text[i + 1].isalpha() or text[i + 1] == "/")
+            ):
+                end = text.find(">", i + 1)
+                if end != -1:
+                    ranges.append((i, end + 1))
+                    i = end + 1
+                else:
+                    i += 1
+            elif text[i] == "[":
+                end_b = text.find("]", i + 1)
+                if end_b != -1 and end_b + 1 < n and text[end_b + 1] == "(":
+                    end_p = text.find(")", end_b + 2)
+                    if end_p != -1:
+                        ranges.append((i, end_p + 1))
+                        i = end_p + 1
+                        continue
+                i += 1
+            else:
+                i += 1
+        return ranges
+
+    @staticmethod
+    def _find_safe_insert_pos(text: str, start_idx: int) -> int:
+        """Сдвигает start_idx вперёд, пока он не окажется вне любой парной структуры."""
+        unsafe = AgentGraphPlanner._collect_unsafe_ranges(text)
+        pos = start_idx
+        changed = True
+        while changed:
+            changed = False
+            for a, b in unsafe:
+                if a < pos < b:
+                    pos = b
+                    changed = True
+                    break
+        return pos
+
     def _apply_graphs_to_markdown(
         self, conspect_md: str, analysis_results: list[dict[str, Any]]
     ) -> str:
@@ -156,7 +230,9 @@ class AgentGraphPlanner(BaseLlamaCppAgent):
                     if match.size >= min_match_len:
                         last_norm_idx = match.a + match.size - 1
                         last_real_idx = real_imap[last_norm_idx]
-                        insert_idx = last_real_idx + 1
+                        insert_idx = self._find_safe_insert_pos(
+                            conspect_md, last_real_idx + 1
+                        )
 
                         conspect_md = (
                             conspect_md[:insert_idx]

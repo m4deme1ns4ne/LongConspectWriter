@@ -73,6 +73,7 @@ def main() -> None:
             "grapher",
             "add_graph_in_conspect",
             "graph_planner",
+            "convert_md_to_pdf",
         ],
         default="all",
         help="Тип операция с MAS",
@@ -102,18 +103,22 @@ def main() -> None:
         help="Путь к JSON-файлу с путями сгенерированных графиков",
     )
     parser.add_argument(
-        "--continue_pipeline",
+        "--lecture_theme",
         type=str,
         required=False,
-        help="Продолжить пайплайн с выбранного action и до конца",
+        help="Путь к JSON-файлу с путями сгенерированных графиков",
     )
     args = parser.parse_args()
 
-    args.output_file_path = "src/configs/config_pipeline.yaml"
+    args.config_path = "src/configs/config_pipeline.yaml"
 
-    with open(args.output_file_path, "r", encoding="utf-8") as file:
+    with open(args.config_path, "r", encoding="utf-8") as file:
         raw_pipeline_cfg = yaml.safe_load(file)
-    pipeline_config = PipelineConfig(**raw_pipeline_cfg.get("app_config", {}))
+
+    app_config_dict = raw_pipeline_cfg.get("app_config", {})
+    app_config_dict["lecture_theme"] = args.lecture_theme
+
+    pipeline_config = PipelineConfig(**app_config_dict)
 
     stt_bundle = load_agent_bundle(
         "src/configs/config-agents/stt/config_stt.yaml",
@@ -241,6 +246,9 @@ def main() -> None:
 
         elif args.action == "graph_planner":
             output_path = pipeline._call_graph_planner(path_to_file)
+
+        elif args.action == "convert_md_to_pdf":
+            output_path = pipeline.convert_md_to_pdf(path_to_file)
 
     if output_path is not None:
         logger.info("Работа завершена.")
