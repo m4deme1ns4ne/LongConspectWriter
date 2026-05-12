@@ -74,12 +74,8 @@ flowchart TD
 
 - Python `3.12+`
 - `uv`
-- CUDA-совместимая среда для локального запуска моделей
-- GGUF-модели для LLM-агентов
 
-> Система тестировалась на GeForce RTX 3050 8gb с CUDA 12.1.
-
-Зависимости описаны в `pyproject.toml`. Для PyTorch используется индекс CUDA 12.1:
+> Система тестировалась на GeForce RTX 3050 8gb
 
 ```toml
 [[tool.uv.index]]
