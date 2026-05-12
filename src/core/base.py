@@ -24,10 +24,42 @@ from llama_cpp import Llama
 from src.configs.configs import AppSTTConfig, STTGenConfig, STTInitConfig
 from faster_whisper import WhisperModel
 import json
+import multiprocessing
+import queue as _queue
 from pathlib import Path
 from datetime import datetime
 import matplotlib.pyplot as plt
 import time
+
+
+def _run_in_subprocess(
+    cls: type,
+    init_args: tuple,
+    init_kwargs: dict,
+    run_args: tuple,
+    run_kwargs: dict,
+    q: multiprocessing.Queue,
+) -> None:
+    """Воркер subprocess: пересоздаёт экземпляр cls и вызывает run.
+
+    Должна быть module-level функцией — иначе Windows multiprocessing
+    не сможет её запиклить при передаче в Process.
+
+    Args:
+        cls: Класс, экземпляр которого пересоздаётся в subprocess.
+        init_args: Позиционные аргументы для ``__init__``.
+        init_kwargs: Именованные аргументы для ``__init__``.
+        run_args: Позиционные аргументы для ``run``.
+        run_kwargs: Именованные аргументы для ``run``.
+        q: Очередь для передачи результата в родительский процесс.
+    """
+    try:
+        instance = object.__new__(cls)
+        cls._orig_init(instance, *init_args, **init_kwargs)
+        result = cls._orig_run(instance, *run_args, **run_kwargs)
+        q.put({"status": "success", "path": result})
+    except BaseException as e:
+        q.put({"status": "error", "error": str(e)})
 
 
 class Trackable:
@@ -56,7 +88,54 @@ class Base(ABC):
 
     Подклассы реализуют ``run`` и обычно возвращают путь к артефакту,
     который потребляет следующий строго упорядоченный этап пайплайна.
+
+    Каждый конкретный подкласс, определяющий ``run`` в своём ``__dict__``,
+    автоматически получает subprocess-изоляцию: при вызове ``run()`` объект
+    пересоздаётся в отдельном процессе, который завершается по окончании —
+    память освобождается автоматически, нативные крэши не убивают пайплайн.
     """
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Оборачивает ``run`` подкласса изолированным subprocess.
+
+        Срабатывает автоматически при определении любого подкласса ``Base``.
+        Если подкласс не определяет ``run`` в своём ``__dict__`` — пропускается.
+
+        Args:
+            **kwargs: Стандартные параметры инициализации подкласса.
+        """
+        super().__init_subclass__(**kwargs)
+        if "run" not in cls.__dict__:
+            return
+
+        cls._orig_init: Any = cls.__dict__.get("__init__") or cls.__init__
+        cls._orig_run: Any = cls.run
+
+        def new_init(self, *args: Any, **kw: Any) -> None:
+            self._init_args = args
+            self._init_kwargs = kw
+
+        def new_run(self, *args: Any, **kw: Any) -> Any:
+            q: multiprocessing.Queue = multiprocessing.Queue()
+            p = multiprocessing.Process(
+                target=_run_in_subprocess,
+                args=(type(self), self._init_args, self._init_kwargs, args, kw, q),
+            )
+            p.start()
+            p.join()
+            try:
+                res = q.get(block=True, timeout=5)
+                if res["status"] == "success":
+                    return res["path"]
+                raise RuntimeError(res["error"])
+            except _queue.Empty:
+                raise RuntimeError(f"{cls.__name__}: native crash (exitcode={p.exitcode})")
+
+        new_run.__qualname__ = f"{cls.__name__}.run"
+        new_run.__name__ = "run"
+
+        cls.__init__ = new_init
+        cls.run = new_run
 
     @abstractmethod
     def run(self) -> Any:
@@ -131,6 +210,17 @@ class Base(ABC):
             f"Работа агента {self.__class__.__name__} сохранена в файл по пути: {output_file_path}"
         )
         return output_file_path
+
+    def _write_stage_meta(
+        self, stage_dir: Path, stage_name: str, duration_sec: float, status: str
+    ) -> None:
+        meta = {
+            "stage": stage_name,
+            "status": status,
+            "duration_sec": duration_sec,
+        }
+        with open(Path(stage_dir) / "meta.json", "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=4)
 
 
 class BaseAgent(Trackable, Base):
@@ -276,17 +366,19 @@ class BaseLlamaCppAgent(BaseLLMAgent):
             logger.info(f"Модель {self.model_display_name} загружена.")
 
         self.prompts = LoadPrompts.load_prompts(self._app_config.prompt_path)
+        base_prompt = self.prompts[self._app_config.agent_name]["system_prompt"].get("base", "")
         try:
-            self.system_prompt = self.prompts[self._app_config.agent_name][
+            domain_prompt = self.prompts[self._app_config.agent_name][
                 "system_prompt"
             ][lecture_theme]
         except KeyError:
             logger.warning(
                 f"Промпта для темы {lecture_theme} нету. Будет использован стандартный промпт 'universal'"
             )
-            self.system_prompt = self.prompts[self._app_config.agent_name][
+            domain_prompt = self.prompts[self._app_config.agent_name][
                 "system_prompt"
             ]["universal"]
+        self.system_prompt = domain_prompt + "\n\n" + base_prompt if base_prompt else domain_prompt
 
         logger.info(
             f"Загружен промпт для агента {self.__class__.__name__}, по тематике: {lecture_theme}"
@@ -519,6 +611,43 @@ class BasePipeline(Trackable, Base):
         logger.success(
             f"Папка актуальной сессии создана по пути: {self.actual_session_dir}"
         )
+
+        self._run_start_time = time.perf_counter()
+        self._run_meta: dict = {
+            "started_at": now.isoformat(timespec="seconds"),
+            "status": "running",
+            "stages": {},
+        }
+        self._write_root_meta()
+
+    def _write_root_meta(self) -> None:
+        with open(self.actual_session_dir / "meta.json", "w", encoding="utf-8") as f:
+            json.dump(self._run_meta, f, ensure_ascii=False, indent=4)
+
+    def _update_root_meta(self, stage_key: str, stage_data: dict) -> None:
+        self._run_meta["stages"][stage_key] = stage_data
+        self._write_root_meta()
+
+    def _timed_call(self, stage_key: str, func, *args, **kwargs):
+        t0 = time.perf_counter()
+        try:
+            result = func(*args, **kwargs)
+            duration = round(time.perf_counter() - t0, 1)
+            self._write_stage_meta(Path(result).parent, stage_key, duration, "success")
+            self._update_root_meta(stage_key, {"status": "success", "duration_sec": duration})
+            return result
+        except BaseException as e:
+            duration = round(time.perf_counter() - t0, 1)
+            self._update_root_meta(stage_key, {"status": "failed", "duration_sec": duration, "error": str(e)})
+            raise
+
+    def _finish_run(self, status: str) -> None:
+        self._run_meta.update({
+            "status": status,
+            "total_duration_sec": round(time.perf_counter() - self._run_start_time, 1),
+            "finished_at": datetime.now().isoformat(timespec="seconds"),
+        })
+        self._write_root_meta()
 
 
 class BaseClusterVisualizer(Trackable):

@@ -2,6 +2,7 @@
 
 init_config:
   model_name: "cointegrated/rubert-tiny2"
+  device: "cpu"
 
 gen_config:
   threshold: 0.5

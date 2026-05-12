@@ -2,3 +2,4 @@
 
 init_config:
   model_name: "intfloat/multilingual-e5-small"
+  device: "cpu"

@@ -177,6 +177,7 @@ class LocalClusterizerInitConfig:
     """Настройки инициализации локальной семантической кластеризации."""
 
     model_name: str
+    device: str = None
 
 
 @dataclass
@@ -195,3 +196,4 @@ class GlobalClusterizerInitConfig:
     """Настройки инициализации глобального семантического распределения кластеров."""
 
     model_name: str
+    device: str = "cpu"

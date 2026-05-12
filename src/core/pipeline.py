@@ -9,7 +9,6 @@ import os
 from src.core.base import BasePipeline
 from src.core.utils import check_path_is
 from loguru import logger
-import multiprocessing
 from src.configs.configs import PipelineSessionConfig
 import json
 import shutil
@@ -34,36 +33,9 @@ class LongConspectWriterPipeline(BasePipeline):
         self.pipeline_config = self.config.pipeline
         self.__post_init__()
 
-    def _run_stt_process(
-        self, path: str | os.PathLike, result_queue: multiprocessing.Queue
-    ) -> None:
-        """Запускает STT в изолированном процессе и публикует путь результата.
-
-        Args:
-            path (str | os.PathLike): Путь к исходному аудио или видеофайлу лекции.
-            result_queue (multiprocessing.Queue): Очередь для возврата статуса
-                и пути транскрипта в родительский процесс пайплайна.
-
-        Returns:
-            None: Метод записывает словарь статуса в ``result_queue``.
-        """
-        try:
-            from src.core.stt import FasterWhisper
-
-            faster_whisper = FasterWhisper(
-                session_dir=self.actual_session_dir,
-                init_config=self.config.stt.init_config,
-                gen_config=self.config.stt.gen_config,
-                app_config=self.config.stt.app_config,
-                lecture_theme=self.pipeline_config.lecture_theme,
-            )
-            transcript_path = faster_whisper.run(audio_file_path=path)
-            result_queue.put({"status": "success", "path": transcript_path})
-        except Exception as e:
-            result_queue.put({"status": "error", "error": str(e)})
-
+    @check_path_is
     def _call_stt(self, path: str | os.PathLike) -> str:
-        """Запускает этап транскрибации FasterWhisper.
+        """Запускает этап транскрибации FasterWhisper в изолированном subprocess.
 
         Args:
             path (str | os.PathLike): Путь к исходному аудио или видео лекции.
@@ -71,25 +43,15 @@ class LongConspectWriterPipeline(BasePipeline):
         Returns:
             str: Путь к сырому артефакту транскрипта, созданному STT.
         """
-        logger.info("Запуск STT агента в изолированном процессе...")
-        result_queue = multiprocessing.Queue()
-        process = multiprocessing.Process(
-            target=self._run_stt_process, args=(path, result_queue)
-        )
-        process.start()
-        process.join()
-        if not result_queue.empty():
-            result = result_queue.get()
-            if result["status"] == "success":
-                return result["path"]
-            else:
-                raise RuntimeError(
-                    f"Ошибка транскрибации в фоновом процессе: {result['error']}"
-                )
-        else:
-            raise RuntimeError(
-                "Процесс STT завершился, но не вернул результат. Возможно, произошло жесткое падение CTranslate2."
-            )
+        from src.core.stt import FasterWhisper
+
+        return FasterWhisper(
+            session_dir=self.actual_session_dir,
+            init_config=self.config.stt.init_config,
+            gen_config=self.config.stt.gen_config,
+            app_config=self.config.stt.app_config,
+            lecture_theme=self.pipeline_config.lecture_theme,
+        ).run(audio_file_path=path)
 
     @check_path_is
     def _call_local_clustering(self, path: str | os.PathLike) -> str | os.PathLike:
@@ -561,22 +523,26 @@ class LongConspectWriterPipeline(BasePipeline):
             str | None: Путь к финальному Markdown-конспекту с графиками или ``None``,
             если проверяемый этап неожиданно не вернул путь.
         """
-        transcript_path = self._call_stt(audio_file_path)
+        self._run_meta["audio_file"] = str(audio_file_path)
+        self._run_meta["lecture_theme"] = self.pipeline_config.lecture_theme
+        self._write_root_meta()
 
-        clustering_path = self._call_clustering(transcript_path)
-
-        conspect_json = self._call_synthesizer(clustering_path)
-
-        conspect_md_path = self.convert_json_to_md(conspect_json)
-
-        conspect_md_path = self._call_graph_planner(conspect_md_path)
-
-        graphs_path = self._call_grapher(path=conspect_md_path)
-
-        conspect_with_graph = self.add_graph_in_conspect(
-            graphs_path=graphs_path, conspect_md_path=conspect_md_path
-        )
-
-        pdf_path = self.convert_md_to_pdf(conspect_with_graph)
-
-        return pdf_path
+        try:
+            transcript_path = self._timed_call("01_stt", self._call_stt, audio_file_path)
+            clustering_path = self._timed_call("05_global_clusters", self._call_clustering, transcript_path)
+            conspect_json = self._timed_call("06_synthesizer", self._call_synthesizer, clustering_path)
+            conspect_md_path = self._timed_call("07_conspect_md", self.convert_json_to_md, conspect_json)
+            conspect_md_path = self._timed_call("08_graph_planner", self._call_graph_planner, conspect_md_path)
+            graphs_path = self._timed_call("09_grapher", self._call_grapher, path=conspect_md_path)
+            conspect_with_graph = self._timed_call(
+                "10_conspect_with_graph_md",
+                self.add_graph_in_conspect,
+                graphs_path=graphs_path,
+                conspect_md_path=conspect_md_path,
+            )
+            pdf_path = self._timed_call("11_conspect_pdf", self.convert_md_to_pdf, conspect_with_graph)
+            self._finish_run("success")
+            return pdf_path
+        except BaseException:
+            self._finish_run("failed")
+            raise

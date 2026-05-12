@@ -22,9 +22,11 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+from typing import Any
 from src.core.utils import TextsSplitter
-from src.core.base import BaseLocalClusterizer, BaseGlobalClusterizer
-from src.core.vizualization import LocalClusterVisualizer, GlobalClusterVisualizer
+from src.core.base import BaseLocalClusterizer, BaseGlobalClusterizer, BaseClusterVisualizer
 
 
 class SemanticLocalClusterizer(BaseLocalClusterizer):
@@ -51,7 +53,8 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
         self.session_dir = session_dir
         super().__init__(init_config, gen_config)
         self.model = sentence_transformers.SentenceTransformer(
-            self._init_config.model_name
+            self._init_config.model_name,
+            device=self._init_config.device
         )
 
     def run(self, path: str | Path) -> Path:
@@ -180,7 +183,8 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
         self.session_dir = session_dir
         super().__init__(init_config)
         self.model = sentence_transformers.SentenceTransformer(
-            self._init_config.model_name
+            self._init_config.model_name,
+            device=self._init_config.device
         )
 
     def run(self, plan_path: str | Path, local_clusters_path: str | Path) -> Path:
@@ -196,9 +200,11 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
             Path: Путь к сохраненному артефакту глобальных кластеров для синтеза.
         """
 
+        logger.debug("Открываю global_plan JSON...")
         with open(plan_path, "r", encoding="utf-8") as file:
             global_plan = json.load(file)
 
+        logger.debug("Открываю local_clusters JSON...")
         with open(local_clusters_path, "r", encoding="utf-8") as file:
             local_clusters_dict = json.load(file)
 
@@ -206,23 +212,31 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
 
         chapters = global_plan["chapters"]
         chapter_titles = [ch["chapter_title"] for ch in chapters]
+        logger.debug(f"Глав: {len(chapters)}, локальных кластеров: {len(local_clusters)}")
 
+        logger.debug("Кодирую главы (global_plan_embeddings)...")
         global_plan_embeddings = self.model.encode(
             [
                 f"query: {dict_chapter['chapter_title']}. {dict_chapter['description']}"
                 for dict_chapter in chapters
             ]
         )
+        logger.debug(f"global_plan_embeddings: {global_plan_embeddings.shape}")
+
+        logger.debug("Кодирую локальные кластеры (local_clusters_embeddings)...")
         local_clusters_embeddings = self.model.encode(
             [f"passage: {clusters}" for clusters in local_clusters]
         )
+        logger.debug(f"local_clusters_embeddings: {local_clusters_embeddings.shape}")
 
+        logger.debug("Вычисляю cos_sim и torch.max...")
         global_clusters = {key: [] for key in chapter_titles}
         scores = sentence_transformers.util.cos_sim(
             local_clusters_embeddings, global_plan_embeddings
         )
         _, assignments_tensor = torch.max(scores, dim=1)
         assignments = assignments_tensor.tolist()
+        logger.debug(f"Назначения: {len(assignments)} кластеров распределено")
 
         smoothed_assignments = []
         current_chapter = 0  # Начинаем с первой главы
@@ -254,8 +268,10 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
             "Metric": "cosine",
             "Chapters": len(chapter_titles),
         }
+        logger.debug("Запускаю GlobalClusterVisualizer...")
         visualizer = GlobalClusterVisualizer(self.session_dir)
         visualizer.run(local_clusters_embeddings, assignments, chapter_titles, metadata)
+        logger.debug("GlobalClusterVisualizer завершён.")
 
         for chunk_idx, chapter_idx in enumerate(assignments):
             global_clusters[chapter_titles[chapter_idx]].append(
@@ -266,6 +282,7 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
             key: value for key, value in global_clusters.items() if value
         }
 
+        logger.debug(f"Сохраняю результат, глобальных кластеров: {len(global_clusters)}")
         out_filepath = self._safe_result_out_line(
             output=global_clusters,
             stage="05_global_clusters/",
@@ -277,3 +294,65 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
         logger.debug(f"Type local clusters: {type(global_clusters)}")
 
         return out_filepath
+
+
+class LocalClusterVisualizer(BaseClusterVisualizer):
+    """Отрисовывает хронологическое распределение локальных кластеров."""
+
+    def run(self, labels: np.ndarray, metadata: dict[str, Any] | None = None) -> None:
+        cluster_sizes = {}
+        for label in labels:
+            label = int(label)
+            cluster_sizes[label] = cluster_sizes.get(label, 0) + 1
+
+        plt.figure(figsize=(12, 6))
+        plt.bar(
+            range(len(cluster_sizes)),
+            list(cluster_sizes.values()),
+            color="skyblue",
+            edgecolor="black",
+        )
+        plt.title("Распределение предложений по локальным кластерам (Хронология)")
+        plt.xlabel("Индекс локального кластера (время лекции ->)")
+        plt.ylabel("Количество предложений в кластере")
+
+        self._save_and_close("02_local_clusters", "local_distribution", metadata)
+
+
+class GlobalClusterVisualizer(BaseClusterVisualizer):
+    """Отрисовывает семантическую проекцию локальных кластеров по глобальным главам."""
+
+    def run(
+        self,
+        embeddings: np.ndarray,
+        assignments: list[int],
+        chapter_titles: list[str],
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        if len(embeddings) < 2:
+            logger.warning("Слишком мало данных для PCA проекции.")
+            return
+
+        pca = PCA(n_components=2)
+        reduced_embeddings = pca.fit_transform(embeddings)
+
+        unique_chapters = list(dict.fromkeys(assignments))
+        colors = plt.cm.tab10.colors
+        color_map = {ch: colors[i % len(colors)] for i, ch in enumerate(unique_chapters)}
+
+        plt.figure(figsize=(14, 8))
+        for ch_idx in unique_chapters:
+            mask = [i for i, a in enumerate(assignments) if a == ch_idx]
+            plt.scatter(
+                reduced_embeddings[mask, 0],
+                reduced_embeddings[mask, 1],
+                label=f"Ch {ch_idx + 1}",
+                color=color_map[ch_idx],
+                s=100,
+                alpha=0.8,
+            )
+
+        plt.title("Global cluster distribution (PCA)")
+        plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+
+        self._save_and_close("05_global_clusters", "global_distribution", metadata)
