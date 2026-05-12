@@ -6,6 +6,7 @@
       "items": {
         "type": "object",
         "properties": {
+          "reasoning": { "type": "string" },
           "decision": { "type": "boolean" },
           "quote": { "type": "string" },
           "type": { "type": "string" },
@@ -13,7 +14,7 @@
           "task": { "type": "string" },
           "mock_data": { "type": "string" }
         },
-        "required": ["decision", "quote", "type", "title", "task", "mock_data"]
+        "required": ["reasoning", "decision", "quote", "type", "title", "task", "mock_data"]
       }
     }
   },
