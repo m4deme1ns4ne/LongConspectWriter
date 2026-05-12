@@ -3,9 +3,9 @@ src/tests/test_data/
 .models/
 .tasks.md
 .trash/
-examples/.dataset
-examples/comparison/run_stt.py
-examples/comparison/run_lcw.py
+evaluation/dataset
+evaluation/scripts/
+CLAUDE.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
