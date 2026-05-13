@@ -1,0 +1,70 @@
+{
+    "extracted_entities": [
+        "алгоритмическое мышление",
+        "структуры данных",
+        "приложные библиотеки",
+        "паттерн наблюдатель"
+    ]
+}{
+    "extracted_entities": [
+        "практика программирования",
+        "dotnet",
+        "mfc",
+        "sklearn",
+        "requests"
+    ]
+}{
+    "extracted_entities": [
+        "синтаксис python 3",
+        "алгоритмическое мышление",
+        "структуры данных",
+        "design patterns",
+        "ooop",
+        "gitlab",
+        "jira",
+        "slack",
+        "numpy",
+        "pandas",
+        "flask",
+        "requests",
+        "sklearn",
+        "dotnet"
+    ]
+}{
+    "extracted_entities": [
+        "паттерн наблюдатель",
+        "двоичное дерево поиска",
+        "rest api"
+    ]
+}{
+    "extracted_entities": [
+        "сборщик мусора",
+        "ссылка"
+    ]
+}{
+    "extracted_entities": []
+}{
+    "extracted_entities": []
+}{
+    "extracted_entities": []
+}{
+    "extracted_entities": []
+}{
+    "extracted_entities": [
+        "синтаксический сахар",
+        "цикл с предусловием"
+    ]
+}{
+    "extracted_entities": []
+}{
+    "extracted_entities": []
+}{
+    "extracted_entities": []
+}{
+    "extracted_entities": [
+        "range",
+        "for"
+    ]
+}{
+    "extracted_entities": []
+}

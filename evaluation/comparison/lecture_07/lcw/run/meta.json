@@ -1,0 +1,42 @@
+{
+    "started_at": "2026-05-12T20:37:18",
+    "status": "success",
+    "stages": {
+        "01_stt": {
+            "status": "success",
+            "duration_sec": 201.3
+        },
+        "05_global_clusters": {
+            "status": "success",
+            "duration_sec": 216.7
+        },
+        "06_synthesizer": {
+            "status": "success",
+            "duration_sec": 1036.8
+        },
+        "07_conspect_md": {
+            "status": "success",
+            "duration_sec": 0.2
+        },
+        "08_graph_planner": {
+            "status": "success",
+            "duration_sec": 859.9
+        },
+        "09_grapher": {
+            "status": "success",
+            "duration_sec": 69.7
+        },
+        "10_conspect_with_graph_md": {
+            "status": "success",
+            "duration_sec": 0.0
+        },
+        "11_conspect_pdf": {
+            "status": "success",
+            "duration_sec": 8.1
+        }
+    },
+    "audio_file": "C:\\Users\\alexa\\conspectius-engine\\evaluation\\dataset\\Общая биология\\Асеев В. В. - Общая биология - 1. Определение жизни. Микро- и макроэлементы - teach-in.mp3",
+    "lecture_theme": "biology",
+    "total_duration_sec": 2392.7,
+    "finished_at": "2026-05-12T21:17:10"
+}

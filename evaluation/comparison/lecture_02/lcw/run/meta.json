@@ -1,0 +1,42 @@
+{
+    "started_at": "2026-05-12T18:14:10",
+    "status": "success",
+    "stages": {
+        "01_stt": {
+            "status": "success",
+            "duration_sec": 191.4
+        },
+        "05_global_clusters": {
+            "status": "success",
+            "duration_sec": 200.2
+        },
+        "06_synthesizer": {
+            "status": "success",
+            "duration_sec": 773.1
+        },
+        "07_conspect_md": {
+            "status": "success",
+            "duration_sec": 0.2
+        },
+        "08_graph_planner": {
+            "status": "success",
+            "duration_sec": 551.9
+        },
+        "09_grapher": {
+            "status": "success",
+            "duration_sec": 36.2
+        },
+        "10_conspect_with_graph_md": {
+            "status": "success",
+            "duration_sec": 0.0
+        },
+        "11_conspect_pdf": {
+            "status": "success",
+            "duration_sec": 9.5
+        }
+    },
+    "audio_file": "C:\\Users\\alexa\\conspectius-engine\\evaluation\\dataset\\Алгоритмы на Python 3\\Алгоритмы на Python 3. Лекция №2 - Тимофей Хирьянов.mp3",
+    "lecture_theme": "programming",
+    "total_duration_sec": 1762.7,
+    "finished_at": "2026-05-12T18:43:33"
+}

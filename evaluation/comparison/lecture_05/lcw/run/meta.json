@@ -1,0 +1,42 @@
+{
+    "started_at": "2026-05-12T19:52:49",
+    "status": "success",
+    "stages": {
+        "01_stt": {
+            "status": "success",
+            "duration_sec": 176.3
+        },
+        "05_global_clusters": {
+            "status": "success",
+            "duration_sec": 234.9
+        },
+        "06_synthesizer": {
+            "status": "success",
+            "duration_sec": 714.6
+        },
+        "07_conspect_md": {
+            "status": "success",
+            "duration_sec": 0.4
+        },
+        "08_graph_planner": {
+            "status": "success",
+            "duration_sec": 94.8
+        },
+        "09_grapher": {
+            "status": "success",
+            "duration_sec": 15.7
+        },
+        "10_conspect_with_graph_md": {
+            "status": "success",
+            "duration_sec": 0.0
+        },
+        "11_conspect_pdf": {
+            "status": "success",
+            "duration_sec": 9.4
+        }
+    },
+    "audio_file": "C:\\Users\\alexa\\conspectius-engine\\evaluation\\dataset\\Математический анализ\\Шапошников С. В. - Математический анализ. Ч. 1. - 1. Основные определения математического анализа - teach-in.mp3",
+    "lecture_theme": "math",
+    "total_duration_sec": 1246.3,
+    "finished_at": "2026-05-12T20:13:35"
+}

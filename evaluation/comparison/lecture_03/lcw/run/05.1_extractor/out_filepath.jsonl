@@ -1,0 +1,129 @@
+{
+    "extracted_entities": [
+        "transformer",
+        "categorical crossentropy",
+        "adam",
+        "dropout",
+        "softmax",
+        "loss"
+    ]
+}{
+    "extracted_entities": []
+}{
+    "extracted_entities": []
+}{
+    "extracted_entities": [
+        "transformer",
+        "categorical crossentropy",
+        "adam"
+    ]
+}{
+    "extracted_entities": [
+        "линейная модель",
+        "feature generation",
+        "обучение",
+        "применение"
+    ]
+}{
+    "extracted_entities": [
+        "feature generation",
+        "learning algorithm"
+    ]
+}{
+    "extracted_entities": [
+        "эмпирический риск",
+        "наименьшие квадраты",
+        "overfitting",
+        "train",
+        "test",
+        "nn.linear"
+    ]
+}{
+    "extracted_entities": [
+        "линейная модель",
+        "наименьшие квадраты",
+        "holdout",
+        "leave one out",
+        "k-fold cross-validation"
+    ]
+}{
+    "extracted_entities": [
+        "cross-validation",
+        "loss"
+    ]
+}{
+    "extracted_entities": [
+        "классификация",
+        "overfitting"
+    ]
+}{
+    "extracted_entities": [
+        "overfitting",
+        "вещественно-значный классификатор"
+    ]
+}{
+    "extracted_entities": [
+        "adam",
+        "categorical crossentropy",
+        "mean squared error",
+        "accuracy",
+        "f1 score",
+        "dropout",
+        "softmax",
+        "k fold cross validation",
+        "holdout",
+        "leave one out",
+        "feature generation",
+        "feature extraction"
+    ]
+}{
+    "extracted_entities": [
+        "линейная модель",
+        "квадратичная функция потерь",
+        "кусочно-линейная модель",
+        "функционал",
+        "NDCG"
+    ]
+}{
+    "extracted_entities": [
+        "transformer",
+        "categorical crossentropy",
+        "mean squared error",
+        "dropout",
+        "accuracy",
+        "f1 score",
+        "ndcg",
+        "adam",
+        "k fold cross validation",
+        "holdout",
+        "linear"
+    ]
+}{
+    "extracted_entities": [
+        "feature extraction",
+        "feature generation",
+        "глубокие нейронные архитектуры",
+        "глубокие нейронные сети",
+        "эффективные численные методы оптимизации",
+        "вычислительные мощности",
+        "неполные данные",
+        "противоречивые данные",
+        "неточные данные",
+        "неструктурированные данные",
+        "моделирование",
+        "crisp-dm"
+    ]
+}{
+    "extracted_entities": [
+        "adam",
+        "categorical crossentropy",
+        "mean squared error",
+        "accuracy",
+        "f1 score",
+        "ndcg"
+    ]
+}{
+    "extracted_entities": [
+        "метод ближайшего соседа"
+    ]
+}

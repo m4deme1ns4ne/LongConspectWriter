@@ -1,0 +1,42 @@
+{
+    "started_at": "2026-05-12T21:17:32",
+    "status": "success",
+    "stages": {
+        "01_stt": {
+            "status": "success",
+            "duration_sec": 192.3
+        },
+        "05_global_clusters": {
+            "status": "success",
+            "duration_sec": 254.0
+        },
+        "06_synthesizer": {
+            "status": "success",
+            "duration_sec": 999.2
+        },
+        "07_conspect_md": {
+            "status": "success",
+            "duration_sec": 0.2
+        },
+        "08_graph_planner": {
+            "status": "success",
+            "duration_sec": 757.9
+        },
+        "09_grapher": {
+            "status": "success",
+            "duration_sec": 68.4
+        },
+        "10_conspect_with_graph_md": {
+            "status": "success",
+            "duration_sec": 0.0
+        },
+        "11_conspect_pdf": {
+            "status": "success",
+            "duration_sec": 8.1
+        }
+    },
+    "audio_file": "C:\\Users\\alexa\\conspectius-engine\\evaluation\\dataset\\Общая биология\\Асеев В. В. - Общая биология - 2. Биологические мембраны. Вторичные метаболиты - teach-in.mp3",
+    "lecture_theme": "biology",
+    "total_duration_sec": 2280.2,
+    "finished_at": "2026-05-12T21:55:32"
+}

@@ -1,0 +1,42 @@
+{
+    "started_at": "2026-05-12T19:12:37",
+    "status": "success",
+    "stages": {
+        "01_stt": {
+            "status": "success",
+            "duration_sec": 195.8
+        },
+        "05_global_clusters": {
+            "status": "success",
+            "duration_sec": 210.0
+        },
+        "06_synthesizer": {
+            "status": "success",
+            "duration_sec": 1083.0
+        },
+        "07_conspect_md": {
+            "status": "success",
+            "duration_sec": 0.2
+        },
+        "08_graph_planner": {
+            "status": "success",
+            "duration_sec": 866.0
+        },
+        "09_grapher": {
+            "status": "success",
+            "duration_sec": 27.5
+        },
+        "10_conspect_with_graph_md": {
+            "status": "success",
+            "duration_sec": 0.0
+        },
+        "11_conspect_pdf": {
+            "status": "success",
+            "duration_sec": 8.4
+        }
+    },
+    "audio_file": "C:\\Users\\alexa\\conspectius-engine\\evaluation\\dataset\\Машинное обучение. Школа анализа данных, Яндекс\\Машинное обучение. Линейные методы. К.В. Воронцов, Школа анализа данных, Яндекс. - Yandex for ML.mp3",
+    "lecture_theme": "machine_learning",
+    "total_duration_sec": 2390.9,
+    "finished_at": "2026-05-12T19:52:28"
+}

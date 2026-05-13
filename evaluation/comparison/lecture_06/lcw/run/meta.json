@@ -1,0 +1,42 @@
+{
+    "started_at": "2026-05-12T20:13:58",
+    "status": "success",
+    "stages": {
+        "01_stt": {
+            "status": "success",
+            "duration_sec": 189.5
+        },
+        "05_global_clusters": {
+            "status": "success",
+            "duration_sec": 275.0
+        },
+        "06_synthesizer": {
+            "status": "success",
+            "duration_sec": 795.0
+        },
+        "07_conspect_md": {
+            "status": "success",
+            "duration_sec": 0.2
+        },
+        "08_graph_planner": {
+            "status": "success",
+            "duration_sec": 94.1
+        },
+        "09_grapher": {
+            "status": "success",
+            "duration_sec": 16.2
+        },
+        "10_conspect_with_graph_md": {
+            "status": "success",
+            "duration_sec": 0.0
+        },
+        "11_conspect_pdf": {
+            "status": "success",
+            "duration_sec": 8.8
+        }
+    },
+    "audio_file": "C:\\Users\\alexa\\conspectius-engine\\evaluation\\dataset\\Математический анализ\\Шапошников С.В.-Математический анализ. Ч.1.- 2.Функция и её график. Мн-ва целых и рациональных чисел - teach-in.mp3",
+    "lecture_theme": "math",
+    "total_duration_sec": 1378.8,
+    "finished_at": "2026-05-12T20:36:57"
+}

@@ -1,0 +1,42 @@
+{
+    "started_at": "2026-05-12T22:24:34",
+    "status": "success",
+    "stages": {
+        "01_stt": {
+            "status": "success",
+            "duration_sec": 155.8
+        },
+        "05_global_clusters": {
+            "status": "success",
+            "duration_sec": 217.4
+        },
+        "06_synthesizer": {
+            "status": "success",
+            "duration_sec": 789.8
+        },
+        "07_conspect_md": {
+            "status": "success",
+            "duration_sec": 0.2
+        },
+        "08_graph_planner": {
+            "status": "success",
+            "duration_sec": 478.9
+        },
+        "09_grapher": {
+            "status": "success",
+            "duration_sec": 107.1
+        },
+        "10_conspect_with_graph_md": {
+            "status": "success",
+            "duration_sec": 0.0
+        },
+        "11_conspect_pdf": {
+            "status": "success",
+            "duration_sec": 8.0
+        }
+    },
+    "audio_file": "C:\\Users\\alexa\\conspectius-engine\\evaluation\\dataset\\Общая химия\\Ерёмин В. В. - Общая химия - 2. Атом водорода и многоэлектронные атомы - teach-in.mp3",
+    "lecture_theme": "chemistry",
+    "total_duration_sec": 1757.4,
+    "finished_at": "2026-05-12T22:53:52"
+}
