@@ -7,8 +7,7 @@
 
 from abc import ABC, abstractmethod
 from loguru import logger
-from src.core.vram_manager import VRamCleaner
-from src.core.utils import log_execution_time, LoadPrompts, modify_retry
+import src.core.utils as utils
 from src.configs.configs import (
     LLMInitConfig,
     LLMGenConfig,
@@ -19,7 +18,6 @@ from src.configs.configs import (
 )
 from dataclasses import asdict
 from typing import Any
-from types import TracebackType
 from llama_cpp import Llama
 from src.configs.configs import AppSTTConfig, STTGenConfig, STTInitConfig
 from faster_whisper import WhisperModel
@@ -30,6 +28,7 @@ from pathlib import Path
 from datetime import datetime
 import matplotlib.pyplot as plt
 import time
+import traceback
 
 
 def _run_in_subprocess(
@@ -53,13 +52,17 @@ def _run_in_subprocess(
         run_kwargs: Именованные аргументы для ``run``.
         q: Очередь для передачи результата в родительский процесс.
     """
+    import src.core.utils as utils
+
+    utils.configure_logger()
     try:
         instance = object.__new__(cls)
         cls._orig_init(instance, *init_args, **init_kwargs)
         result = cls._orig_run(instance, *run_args, **run_kwargs)
         q.put({"status": "success", "path": result})
     except BaseException as e:
-        q.put({"status": "error", "error": str(e)})
+        tb_str = traceback.format_exc()
+        q.put({"status": "error", "error": str(e), "traceback": tb_str})
 
 
 class Trackable:
@@ -80,7 +83,7 @@ class Trackable:
         """
         super().__init_subclass__(**kwargs)
         if "run" in cls.__dict__:
-            cls.run = log_execution_time(cls.run)
+            cls.run = utils.log_execution_time(cls.run)
 
 
 class Base(ABC):
@@ -127,9 +130,13 @@ class Base(ABC):
                 res = q.get(block=True, timeout=5)
                 if res["status"] == "success":
                     return res["path"]
+
+                logger.error(f"Traceback from subprocess:\n{res.get('traceback', '')}")
                 raise RuntimeError(res["error"])
             except _queue.Empty:
-                raise RuntimeError(f"{cls.__name__}: native crash (exitcode={p.exitcode})")
+                raise RuntimeError(
+                    f"{cls.__name__}: native crash (exitcode={p.exitcode})"
+                )
 
         new_run.__qualname__ = f"{cls.__name__}.run"
         new_run.__name__ = "run"
@@ -242,7 +249,7 @@ class BaseAgent(Trackable, Base):
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
+        exc_tb: None,
     ) -> None:
         """Освобождает ресурсы принадлежащей агенту модели при выходе из этапа.
 
@@ -257,13 +264,7 @@ class BaseAgent(Trackable, Base):
         Returns:
             None: Очистка выполняется для моделей, которыми агент владеет.
         """
-        if getattr(self, "_owns_model", True):
-            logger.debug(f"Очистка памяти от агента {self.__class__.__name__}...")
-            if hasattr(self, "model"):
-                del self.model
-            if hasattr(self, "tokenizer"):
-                del self.tokenizer
-            VRamCleaner.empty_vram(caller_name=self.__class__.__name__)
+        pass
 
 
 class BaseLLMAgent(BaseAgent):
@@ -332,15 +333,11 @@ class BaseLlamaCppAgent(BaseLLMAgent):
             if self._init_config.model_path
             else f"{self._init_config.repo_id}/{self._init_config.filename}"
         )
-        logger.info(
-            f"Инициализация {self.__class__.__name__} (Модель: {self.model_display_name})"
-        )
-
         if shared_model:
             self.model = shared_model
             self._owns_model = False
-            logger.warning(
-                f"Модель {self.model_display_name} уже была загружена в память."
+            logger.debug(
+                f"Инициализация {self.__class__.__name__} с общей моделью {self.model_display_name}"
             )
         else:
             init_kwargs = asdict(self._init_config)
@@ -365,24 +362,36 @@ class BaseLlamaCppAgent(BaseLLMAgent):
             self._owns_model = True
             logger.info(f"Модель {self.model_display_name} загружена.")
 
-        self.prompts = LoadPrompts.load_prompts(self._app_config.prompt_path)
-        base_prompt = self.prompts[self._app_config.agent_name]["system_prompt"].get("base", "")
+        self.prompts = utils.LoadPrompts.load_prompts(self._app_config.prompt_path)
+        base_prompt = self.prompts[self._app_config.agent_name]["system_prompt"].get(
+            "base", ""
+        )
         try:
-            domain_prompt = self.prompts[self._app_config.agent_name][
-                "system_prompt"
-            ][lecture_theme]
+            domain_prompt = self.prompts[self._app_config.agent_name]["system_prompt"][
+                lecture_theme
+            ]
         except KeyError:
             logger.warning(
                 f"Промпта для темы {lecture_theme} нету. Будет использован стандартный промпт 'universal'"
             )
-            domain_prompt = self.prompts[self._app_config.agent_name][
-                "system_prompt"
-            ]["universal"]
-        self.system_prompt = domain_prompt + "\n\n" + base_prompt if base_prompt else domain_prompt
-
-        logger.info(
-            f"Загружен промпт для агента {self.__class__.__name__}, по тематике: {lecture_theme}"
+            domain_prompt = self.prompts[self._app_config.agent_name]["system_prompt"][
+                "universal"
+            ]
+        self.system_prompt = (
+            domain_prompt + "\n\n" + base_prompt if base_prompt else domain_prompt
         )
+
+        if self._owns_model:
+            logger.info(
+                f"Инициализация {self.__class__.__name__} (Модель: {self.model_display_name})"
+            )
+            logger.info(
+                f"Загружен промпт для агента {self.__class__.__name__}, по тематике: {lecture_theme}"
+            )
+        else:
+            logger.debug(
+                f"Загружен промпт для агента {self.__class__.__name__}, по тематике: {lecture_theme}"
+            )
         self.user_template = self.prompts[self._app_config.agent_name]["user_template"]
 
         logger.debug(
@@ -434,7 +443,7 @@ class BaseLlamaCppAgent(BaseLLMAgent):
             {"role": "user", "content": user_prompt},
         ]
 
-    @modify_retry
+    @utils.modify_retry
     def _generate(
         self,
         prompt: list[dict[str, str]],
@@ -531,7 +540,7 @@ class BaseSTTAgent(BaseAgent):
         logger.debug(
             f"Параметры использования агента {self.__class__.__name__}: {self._app_config}"
         )
-        self.prompt = LoadPrompts.load_prompts(self._app_config.prompt_path)
+        self.prompt = utils.LoadPrompts.load_prompts(self._app_config.prompt_path)
 
         try:
             self.initial_prompt = self.prompt[self._app_config.agent_name][
@@ -634,19 +643,28 @@ class BasePipeline(Trackable, Base):
             result = func(*args, **kwargs)
             duration = round(time.perf_counter() - t0, 1)
             self._write_stage_meta(Path(result).parent, stage_key, duration, "success")
-            self._update_root_meta(stage_key, {"status": "success", "duration_sec": duration})
+            self._update_root_meta(
+                stage_key, {"status": "success", "duration_sec": duration}
+            )
             return result
         except BaseException as e:
             duration = round(time.perf_counter() - t0, 1)
-            self._update_root_meta(stage_key, {"status": "failed", "duration_sec": duration, "error": str(e)})
+            self._update_root_meta(
+                stage_key,
+                {"status": "failed", "duration_sec": duration, "error": str(e)},
+            )
             raise
 
     def _finish_run(self, status: str) -> None:
-        self._run_meta.update({
-            "status": status,
-            "total_duration_sec": round(time.perf_counter() - self._run_start_time, 1),
-            "finished_at": datetime.now().isoformat(timespec="seconds"),
-        })
+        self._run_meta.update(
+            {
+                "status": status,
+                "total_duration_sec": round(
+                    time.perf_counter() - self._run_start_time, 1
+                ),
+                "finished_at": datetime.now().isoformat(timespec="seconds"),
+            }
+        )
         self._write_root_meta()
 
 
