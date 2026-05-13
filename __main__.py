@@ -11,7 +11,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from loguru import logger
-from tqdm import tqdm
 
 from src.core.pipeline import LongConspectWriterPipeline
 from src.configs.configs import (
@@ -27,7 +26,7 @@ from src.configs.configs import (
     LocalClusterizerGenConfig,
     GlobalClusterizerInitConfig,
 )
-from src.core.utils import load_agent_bundle
+import src.core.utils as utils
 
 
 def main() -> None:
@@ -46,13 +45,7 @@ def main() -> None:
         Exception: Пробрасывает ошибки выбранного этапа пайплайна.
     """
     load_dotenv()
-    logger.remove()
-    logger.add(
-        lambda msg: tqdm.write(msg, end=""),
-        colorize=True,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-    )
-
+    utils.configure_logger()
     parser = argparse.ArgumentParser(
         description="CLI для управления LongConspectWriter."
     )
@@ -120,57 +113,57 @@ def main() -> None:
 
     pipeline_config = PipelineConfig(**app_config_dict)
 
-    stt_bundle = load_agent_bundle(
+    stt_bundle = utils.load_agent_bundle(
         "src/configs/config-agents/stt/config_stt.yaml",
         STTInitConfig,
         STTGenConfig,
         AppSTTConfig,
     )
-    synth_bundle = load_agent_bundle(
+    synth_bundle = utils.load_agent_bundle(
         "src/configs/config-agents/synthesizer/config_synthesizer.yaml",
         LLMInitConfig,
         LLMGenConfig,
         LLMAppConfig,
     )
-    lp_bundle = load_agent_bundle(
+    lp_bundle = utils.load_agent_bundle(
         "src/configs/config-agents/local_planner/config_local_planner.yaml",
         LLMInitConfig,
         LLMGenConfig,
         LLMAppConfig,
     )
-    gp_bundle = load_agent_bundle(
+    gp_bundle = utils.load_agent_bundle(
         "src/configs/config-agents/global_planner/config_global_planner.yaml",
         LLMInitConfig,
         LLMGenConfig,
         LLMAppConfig,
     )
-    ex_bundle = load_agent_bundle(
+    ex_bundle = utils.load_agent_bundle(
         "src/configs/config-agents/extractor/config_extractor_planner.yaml",
         LLMInitConfig,
         LLMGenConfig,
         LLMAppConfig,
     )
 
-    local_cluster_bundle = load_agent_bundle(
+    local_cluster_bundle = utils.load_agent_bundle(
         "src/configs/config-clusterizer/config_local_clusterizer.yaml",
         LocalClusterizerInitConfig,
         LocalClusterizerGenConfig,
         None,
     )
-    global_cluster_bundle = load_agent_bundle(
+    global_cluster_bundle = utils.load_agent_bundle(
         "src/configs/config-clusterizer/config_global_clusterizer.yaml",
         GlobalClusterizerInitConfig,
         None,
         None,
     )
 
-    grph_bundle = load_agent_bundle(
+    grph_bundle = utils.load_agent_bundle(
         "src/configs/config-agents/grapher/config_grapher.yaml",
         LLMInitConfig,
         LLMGenConfig,
         LLMAppConfig,
     )
-    grph_pl_bundle = load_agent_bundle(
+    grph_pl_bundle = utils.load_agent_bundle(
         "src/configs/config-agents/graph_planner/config_graph_planner.yaml",
         LLMInitConfig,
         LLMGenConfig,

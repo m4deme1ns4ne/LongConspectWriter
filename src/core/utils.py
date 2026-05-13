@@ -18,6 +18,7 @@ from src.configs.configs import AgentConfigBundle
 from tenacity import stop_after_attempt, wait_fixed, retry
 from tenacity import RetryCallState
 from typing import Callable, Any, TypeVar, ParamSpec
+import tqdm
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -226,4 +227,14 @@ def load_agent_bundle(
 
     return AgentConfigBundle(
         init_config=init_cfg, gen_config=gen_cfg, app_config=app_cfg
+    )
+
+
+def configure_logger() -> None:
+    logger.remove()
+    logger.add(
+        lambda msg: tqdm.tqdm.write(msg, end=""),
+        colorize=True,
+        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        catch=False
     )
