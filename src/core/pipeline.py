@@ -528,19 +528,33 @@ class LongConspectWriterPipeline(BasePipeline):
         self._write_root_meta()
 
         try:
-            transcript_path = self._timed_call("01_stt", self._call_stt, audio_file_path)
-            clustering_path = self._timed_call("05_global_clusters", self._call_clustering, transcript_path)
-            conspect_json = self._timed_call("06_synthesizer", self._call_synthesizer, clustering_path)
-            conspect_md_path = self._timed_call("07_conspect_md", self.convert_json_to_md, conspect_json)
-            conspect_md_path = self._timed_call("08_graph_planner", self._call_graph_planner, conspect_md_path)
-            graphs_path = self._timed_call("09_grapher", self._call_grapher, path=conspect_md_path)
+            transcript_path = self._timed_call(
+                "01_stt", self._call_stt, audio_file_path
+            )
+            clustering_path = self._timed_call(
+                "05_global_clusters", self._call_clustering, transcript_path
+            )
+            conspect_json = self._timed_call(
+                "06_synthesizer", self._call_synthesizer, clustering_path
+            )
+            conspect_md_path = self._timed_call(
+                "07_conspect_md", self.convert_json_to_md, conspect_json
+            )
+            conspect_md_path = self._timed_call(
+                "08_graph_planner", self._call_graph_planner, conspect_md_path
+            )
+            graphs_path = self._timed_call(
+                "09_grapher", self._call_grapher, path=conspect_md_path
+            )
             conspect_with_graph = self._timed_call(
                 "10_conspect_with_graph_md",
                 self.add_graph_in_conspect,
                 graphs_path=graphs_path,
                 conspect_md_path=conspect_md_path,
             )
-            pdf_path = self._timed_call("11_conspect_pdf", self.convert_md_to_pdf, conspect_with_graph)
+            pdf_path = self._timed_call(
+                "11_conspect_pdf", self.convert_md_to_pdf, conspect_with_graph
+            )
             self._finish_run("success")
             return pdf_path
         except BaseException:

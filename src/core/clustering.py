@@ -26,7 +26,11 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from typing import Any
 from src.core.utils import TextsSplitter
-from src.core.base import BaseLocalClusterizer, BaseGlobalClusterizer, BaseClusterVisualizer
+from src.core.base import (
+    BaseLocalClusterizer,
+    BaseGlobalClusterizer,
+    BaseClusterVisualizer,
+)
 
 
 class SemanticLocalClusterizer(BaseLocalClusterizer):
@@ -53,8 +57,7 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
         self.session_dir = session_dir
         super().__init__(init_config, gen_config)
         self.model = sentence_transformers.SentenceTransformer(
-            self._init_config.model_name,
-            device=self._init_config.device
+            self._init_config.model_name, device=self._init_config.device
         )
 
     def run(self, path: str | Path) -> Path:
@@ -183,8 +186,7 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
         self.session_dir = session_dir
         super().__init__(init_config)
         self.model = sentence_transformers.SentenceTransformer(
-            self._init_config.model_name,
-            device=self._init_config.device
+            self._init_config.model_name, device=self._init_config.device
         )
 
     def run(self, plan_path: str | Path, local_clusters_path: str | Path) -> Path:
@@ -212,7 +214,9 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
 
         chapters = global_plan["chapters"]
         chapter_titles = [ch["chapter_title"] for ch in chapters]
-        logger.debug(f"Глав: {len(chapters)}, локальных кластеров: {len(local_clusters)}")
+        logger.debug(
+            f"Глав: {len(chapters)}, локальных кластеров: {len(local_clusters)}"
+        )
 
         logger.debug("Кодирую главы (global_plan_embeddings)...")
         global_plan_embeddings = self.model.encode(
@@ -282,7 +286,9 @@ class SemanticGlobalClusterizer(BaseGlobalClusterizer):
             key: value for key, value in global_clusters.items() if value
         }
 
-        logger.debug(f"Сохраняю результат, глобальных кластеров: {len(global_clusters)}")
+        logger.debug(
+            f"Сохраняю результат, глобальных кластеров: {len(global_clusters)}"
+        )
         out_filepath = self._safe_result_out_line(
             output=global_clusters,
             stage="05_global_clusters/",
@@ -338,7 +344,9 @@ class GlobalClusterVisualizer(BaseClusterVisualizer):
 
         unique_chapters = list(dict.fromkeys(assignments))
         colors = plt.cm.tab10.colors
-        color_map = {ch: colors[i % len(colors)] for i, ch in enumerate(unique_chapters)}
+        color_map = {
+            ch: colors[i % len(colors)] for i, ch in enumerate(unique_chapters)
+        }
 
         plt.figure(figsize=(14, 8))
         for ch_idx in unique_chapters:

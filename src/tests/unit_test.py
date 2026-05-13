@@ -28,12 +28,14 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import matplotlib
+
 matplotlib.use("Agg")
 
 
 # ---------------------------------------------------------------------------
 # _format_cluster_output — алгоритм сглаживания хронологических кластеров
 # ---------------------------------------------------------------------------
+
 
 class TestFormatClusterOutput:
     """Тесты алгоритма сглаживания хронологических кластеров транскрипта.
@@ -52,6 +54,7 @@ class TestFormatClusterOutput:
         не обращается к self.model и не требует инициализированных атрибутов.
         """
         from src.core.clustering import SemanticLocalClusterizer
+
         self.obj = object.__new__(SemanticLocalClusterizer)
 
     def test_all_same_label_gives_one_cluster(self) -> None:
@@ -59,7 +62,9 @@ class TestFormatClusterOutput:
         sentences = [f"Предложение {i}." for i in range(6)]
         labels = np.array([0] * 6)
 
-        clusters, final_labels = self.obj._format_cluster_output(sentences, labels, min_sentences=5)
+        clusters, final_labels = self.obj._format_cluster_output(
+            sentences, labels, min_sentences=5
+        )
 
         assert len(clusters) == 1
         # final_labels должны совпадать по индексу с индексами clusters
@@ -70,7 +75,9 @@ class TestFormatClusterOutput:
         sentences = [f"Предложение {i}." for i in range(12)]
         labels = np.array([0] * 6 + [1] * 6)
 
-        clusters, _ = self.obj._format_cluster_output(sentences, labels, min_sentences=5)
+        clusters, _ = self.obj._format_cluster_output(
+            sentences, labels, min_sentences=5
+        )
 
         assert len(clusters) == 2
 
@@ -84,7 +91,9 @@ class TestFormatClusterOutput:
         sentences = [f"Предложение {i}." for i in range(8)]
         labels = np.array([0] * 6 + [1] * 2)
 
-        clusters, _ = self.obj._format_cluster_output(sentences, labels, min_sentences=5)
+        clusters, _ = self.obj._format_cluster_output(
+            sentences, labels, min_sentences=5
+        )
 
         assert len(clusters) == 1
         # Убеждаемся, что хвостовые предложения физически вошли в кластер
@@ -102,7 +111,9 @@ class TestFormatClusterOutput:
         sentences = [f"Предложение {i}." for i in range(14)]
         labels = np.array([0] * 6 + [1] * 2 + [0] * 6)
 
-        clusters, _ = self.obj._format_cluster_output(sentences, labels, min_sentences=5)
+        clusters, _ = self.obj._format_cluster_output(
+            sentences, labels, min_sentences=5
+        )
 
         assert len(clusters) == 2
 
@@ -111,7 +122,9 @@ class TestFormatClusterOutput:
         sentences = ["Первое.", "Второе.", "Третье.", "Четвёртое.", "Пятое.", "Шестое."]
         labels = np.array([0] * 6)
 
-        clusters, _ = self.obj._format_cluster_output(sentences, labels, min_sentences=5)
+        clusters, _ = self.obj._format_cluster_output(
+            sentences, labels, min_sentences=5
+        )
 
         assert "Первое." in clusters[0]
         assert "Шестое." in clusters[0]
@@ -125,7 +138,9 @@ class TestFormatClusterOutput:
         sentences = [f"Предложение {i}." for i in range(10)]
         labels = np.array([0] * 5 + [1] * 5)
 
-        _, final_labels = self.obj._format_cluster_output(sentences, labels, min_sentences=5)
+        _, final_labels = self.obj._format_cluster_output(
+            sentences, labels, min_sentences=5
+        )
 
         assert len(final_labels) == len(sentences)
 
@@ -133,6 +148,7 @@ class TestFormatClusterOutput:
 # ---------------------------------------------------------------------------
 # getting_graphs_from_conspect — парсер плейсхолдеров с вложенными скобками
 # ---------------------------------------------------------------------------
+
 
 class TestGettingGraphsFromConspect:
     """Тесты парсера плейсхолдеров [GRAPH_TYPE: ...] в тексте конспекта.
@@ -151,6 +167,7 @@ class TestGettingGraphsFromConspect:
         getting_graphs_from_conspect не использует self.* атрибуты.
         """
         from src.core.pipeline import LongConspectWriterPipeline
+
         self.obj = object.__new__(LongConspectWriterPipeline)
 
     def test_empty_string_returns_empty_list(self) -> None:
@@ -159,7 +176,10 @@ class TestGettingGraphsFromConspect:
 
     def test_plain_text_without_placeholder_returns_empty(self) -> None:
         """Обычный текст без [GRAPH_TYPE: ...] — результат пустой."""
-        assert self.obj.getting_graphs_from_conspect("Обычный текст лекции без графиков.") == []
+        assert (
+            self.obj.getting_graphs_from_conspect("Обычный текст лекции без графиков.")
+            == []
+        )
 
     def test_single_placeholder_is_found(self) -> None:
         """Один плейсхолдер с вложенными скобками в данных корректно распознаётся."""
@@ -225,6 +245,7 @@ class TestGettingGraphsFromConspect:
 # TextsSplitter.split_text_to_sentences — разбиение транскрипта через razdel
 # ---------------------------------------------------------------------------
 
+
 class TestTextsSplitter:
     """Тесты разбиения транскрипта на предложения через razdel.
 
@@ -236,6 +257,7 @@ class TestTextsSplitter:
     def test_normal_russian_text_splits_correctly(self) -> None:
         """Три предложения с разными знаками конца — три элемента в результате."""
         from src.core.utils import TextsSplitter
+
         text = "Это первое предложение. Это второе. А это третье!"
 
         result = TextsSplitter.split_text_to_sentences(text)
@@ -245,6 +267,7 @@ class TestTextsSplitter:
     def test_single_sentence_returns_one_element(self) -> None:
         """Одно предложение — список из одного элемента с тем же текстом."""
         from src.core.utils import TextsSplitter
+
         text = "Одно единственное предложение."
 
         result = TextsSplitter.split_text_to_sentences(text)
@@ -267,6 +290,7 @@ class TestTextsSplitter:
     def test_result_contains_only_strings(self) -> None:
         """Все элементы результата — строки, а не объекты razdel."""
         from src.core.utils import TextsSplitter
+
         text = "Первое предложение. Второе предложение."
 
         result = TextsSplitter.split_text_to_sentences(text)
@@ -276,6 +300,7 @@ class TestTextsSplitter:
     def test_sentences_preserve_original_text(self) -> None:
         """Специальные символы (формулы, степени) не теряются при сплите."""
         from src.core.utils import TextsSplitter
+
         text = "Формула Эйлера: e^(iπ) + 1 = 0. Это красиво."
 
         result = TextsSplitter.split_text_to_sentences(text)
@@ -289,6 +314,7 @@ class TestTextsSplitter:
 # ---------------------------------------------------------------------------
 # convert_json_to_md — конвертация JSON-конспекта синтезатора в Markdown
 # ---------------------------------------------------------------------------
+
 
 class TestConvertJsonToMd:
     """Тесты конвертации JSON-конспекта синтезатора в Markdown-файл.
@@ -312,6 +338,7 @@ class TestConvertJsonToMd:
             Экземпляр LongConspectWriterPipeline без инициализированного пайплайна.
         """
         from src.core.pipeline import LongConspectWriterPipeline
+
         obj = object.__new__(LongConspectWriterPipeline)
         obj.actual_session_dir = session_dir
         return obj
@@ -345,25 +372,43 @@ class TestConvertJsonToMd:
 
     def test_topic_becomes_h1_header(self, tmp_path: Path) -> None:
         """Ключ словаря (тема) становится заголовком первого уровня # в Markdown."""
-        json_path = self._write_json(tmp_path, {"Введение в интегралы": "Интеграл — площадь."})
+        json_path = self._write_json(
+            tmp_path, {"Введение в интегралы": "Интеграл — площадь."}
+        )
 
-        content = self._make_pipeline(tmp_path).convert_json_to_md(json_path).read_text(encoding="utf-8")
+        content = (
+            self._make_pipeline(tmp_path)
+            .convert_json_to_md(json_path)
+            .read_text(encoding="utf-8")
+        )
 
         assert "# Введение в интегралы" in content
 
     def test_string_body_is_present_in_output(self, tmp_path: Path) -> None:
         """Строковое тело темы дословно переносится в Markdown."""
-        json_path = self._write_json(tmp_path, {"Тема": "Интеграл — площадь под кривой."})
+        json_path = self._write_json(
+            tmp_path, {"Тема": "Интеграл — площадь под кривой."}
+        )
 
-        content = self._make_pipeline(tmp_path).convert_json_to_md(json_path).read_text(encoding="utf-8")
+        content = (
+            self._make_pipeline(tmp_path)
+            .convert_json_to_md(json_path)
+            .read_text(encoding="utf-8")
+        )
 
         assert "Интеграл — площадь под кривой." in content
 
     def test_list_body_all_items_present(self, tmp_path: Path) -> None:
         """Список в теле темы — все элементы попадают в Markdown через двойной перевод строки."""
-        json_path = self._write_json(tmp_path, {"Тема": ["Первый абзац.", "Второй абзац."]})
+        json_path = self._write_json(
+            tmp_path, {"Тема": ["Первый абзац.", "Второй абзац."]}
+        )
 
-        content = self._make_pipeline(tmp_path).convert_json_to_md(json_path).read_text(encoding="utf-8")
+        content = (
+            self._make_pipeline(tmp_path)
+            .convert_json_to_md(json_path)
+            .read_text(encoding="utf-8")
+        )
 
         assert "Первый абзац." in content
         assert "Второй абзац." in content
@@ -373,7 +418,11 @@ class TestConvertJsonToMd:
         data = {"Тема 1": "Текст 1.", "Тема 2": "Текст 2.", "Тема 3": "Текст 3."}
         json_path = self._write_json(tmp_path, data)
 
-        content = self._make_pipeline(tmp_path).convert_json_to_md(json_path).read_text(encoding="utf-8")
+        content = (
+            self._make_pipeline(tmp_path)
+            .convert_json_to_md(json_path)
+            .read_text(encoding="utf-8")
+        )
 
         for topic in data:
             assert f"# {topic}" in content
@@ -382,7 +431,11 @@ class TestConvertJsonToMd:
         """Дисклеймер об AI-генерации присутствует в начале каждого конспекта."""
         json_path = self._write_json(tmp_path, {"Тема": "Текст."})
 
-        content = self._make_pipeline(tmp_path).convert_json_to_md(json_path).read_text(encoding="utf-8")
+        content = (
+            self._make_pipeline(tmp_path)
+            .convert_json_to_md(json_path)
+            .read_text(encoding="utf-8")
+        )
 
         assert "сгенерирован с помощью AI" in content
 
@@ -390,6 +443,7 @@ class TestConvertJsonToMd:
 # ---------------------------------------------------------------------------
 # BaseLlamaCppAgent._generate — распаковка ответа llama.cpp через мок модели
 # ---------------------------------------------------------------------------
+
 
 class TestGenerate:
     """Тесты метода _generate базового LLM-агента.
@@ -442,12 +496,14 @@ class TestGenerate:
         """
         agent = self._make_agent()
         # iter() превращает список в генератор — именно так работает stream в llama.cpp
-        agent.model.create_chat_completion.return_value = iter([
-            {"choices": [{"delta": {"content": "Привет"}}]},
-            {"choices": [{"delta": {"content": ", "}}]},
-            {"choices": [{"delta": {"content": "мир"}}]},
-            {"choices": [{"delta": {}}]},  # последний чанк — нет "content"
-        ])
+        agent.model.create_chat_completion.return_value = iter(
+            [
+                {"choices": [{"delta": {"content": "Привет"}}]},
+                {"choices": [{"delta": {"content": ", "}}]},
+                {"choices": [{"delta": {"content": "мир"}}]},
+                {"choices": [{"delta": {}}]},  # последний чанк — нет "content"
+            ]
+        )
 
         result = agent._generate(
             prompt=[{"role": "user", "content": "Вопрос"}],
@@ -477,6 +533,7 @@ class TestGenerate:
 # ---------------------------------------------------------------------------
 # AgentLocalPlanner.run — фильтрация кластеров по метке [NO_TOPICS]
 # ---------------------------------------------------------------------------
+
 
 class TestLocalPlannerNoTopicsFiltering:
     """Тесты логики фильтрации [NO_TOPICS] в локальном планировщике.
@@ -575,6 +632,7 @@ class TestLocalPlannerNoTopicsFiltering:
 # _AgentExtractor.run — graceful degradation при сломанном JSON от модели
 # ---------------------------------------------------------------------------
 
+
 class TestExtractorJsonFallback:
     """Тесты обработки невалидного JSON-ответа в агенте-экстракторе.
 
@@ -618,11 +676,15 @@ class TestExtractorJsonFallback:
             return_value='{"extracted_entities": ["интегралы", "производная"]}'
         )
 
-        result = type(agent)._orig_run(agent, synthesizer_chunk="Интегралы и производные.")
+        result = type(agent)._orig_run(
+            agent, synthesizer_chunk="Интегралы и производные."
+        )
 
         assert result["extracted_entities"] == ["интегралы", "производная"]
 
-    def test_invalid_json_returns_empty_entities_without_crash(self, tmp_path: Path) -> None:
+    def test_invalid_json_returns_empty_entities_without_crash(
+        self, tmp_path: Path
+    ) -> None:
         """Сломанный JSON не роняет пайплайн — возвращается пустой fallback.
 
         Пайплайн продолжает работу: синтез следующего чанка не прерывается,
@@ -639,6 +701,7 @@ class TestExtractorJsonFallback:
 # ---------------------------------------------------------------------------
 # GlobalClusterVisualizer.run — регрессия ACCESS_VIOLATION (0xC0000005)
 # ---------------------------------------------------------------------------
+
 
 class TestGlobalClusterVisualizer:
     """Тесты визуализатора глобальных кластеров.
@@ -697,7 +760,7 @@ class TestGlobalClusterVisualizer:
         assert list(tmp_path.rglob("*.png")) == []
 
     def test_run_with_cyrillic_chapter_titles(self, tmp_path: Path) -> None:
-        """Кириллика в заголовках глав не вызывает падение — это была первопричина бага."""
+        """Кириллица в заголовках глав не вызывает падение — это была первопричина бага."""
         from src.core.clustering import GlobalClusterVisualizer
 
         viz = GlobalClusterVisualizer(tmp_path)

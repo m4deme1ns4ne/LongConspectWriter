@@ -49,6 +49,15 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
 
         super().__init__(**kwargs)
 
+        self._extractor = _AgentExtractor(
+            init_config=self._init_config,
+            gen_config=self.extractor_gen_config,
+            app_config=self.extractor_app_config,
+            session_dir=self.session_dir,
+            shared_model=self.model,
+            lecture_theme=self.lecture_theme,
+        )
+
     def _generate_synthesizer_chunk(
         self,
         chunk: str,
@@ -120,14 +129,6 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
         Returns:
             None: Аккумуляторы конспекта и контекста обновляются на месте.
         """
-        extractor = _AgentExtractor(
-            init_config=self._init_config,
-            gen_config=self.extractor_gen_config,
-            app_config=self.extractor_app_config,
-            session_dir=self.session_dir,
-            shared_model=self.model,
-            lecture_theme=self.lecture_theme,
-        )
         last_tail = "[НАЧАЛО ДОКУМЕНТА, ПРОДОЛЖАЙ ТЕКСТ]"
         with tqdm(
             total=len(split_clusters),
@@ -150,7 +151,7 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
                 last_tail = " ".join(
                     synthesize_chunk.split()[-self._app_config.last_tail_words_count :]
                 )
-                extracted_dict = extractor.run(synthesizer_chunk=synthesize_chunk)
+                extracted_dict = self._extractor.run(synthesizer_chunk=synthesize_chunk)
                 for term in extracted_dict.get("extracted_entities", []):
                     already_seen_themes.add(term.lower())
                 chunk_pbar.update(1)
@@ -211,5 +212,5 @@ class AgentSynthesizerLlama(BaseLlamaCppAgent):
             session_dir=self.session_dir,
         )
 
-        logger.success(f"Финальный конспект сохранен: {out_filepath}")
+        logger.success(f"Конспект в формате .md сохранен: {out_filepath}")
         return out_filepath
