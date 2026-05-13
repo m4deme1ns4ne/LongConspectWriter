@@ -3,6 +3,7 @@ src/tests/test_data/
 .models/
 .tasks.md
 .trash/
+.claude/
 evaluation/dataset
 evaluation/scripts/
 CLAUDE.md

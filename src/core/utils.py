@@ -9,15 +9,23 @@ from loguru import logger
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import yaml
 from os import PathLike
+import os
+from contextlib import contextmanager, redirect_stderr
 import functools
 import time
 from razdel import sentenize
 import sys
+import ctypes
+import io
+import warnings
+import logging
+from llama_cpp import llama_log_callback, llama_log_set
 from dataclasses import dataclass
 from src.configs.configs import AgentConfigBundle
 from tenacity import stop_after_attempt, wait_fixed, retry
 from tenacity import RetryCallState
 from typing import Callable, Any, TypeVar, ParamSpec
+from collections.abc import Generator
 import tqdm
 
 P = ParamSpec("P")
@@ -68,7 +76,7 @@ class TextsSplitter:
         )
 
         chunks = splitter.split_text(text)
-        logger.info(
+        logger.debug(
             f"Текст успешно разбит на {len(chunks)} фрагментов по {chunk_size} токенов каждый."
         )
         return chunks
@@ -230,7 +238,15 @@ def load_agent_bundle(
     )
 
 
+_llama_noop_log_cb: Any = None
+
+
 def configure_logger() -> None:
+    """Настраивает loguru, фильтры Python-предупреждений и sys.unraisablehook.
+
+    Вызывать один раз при старте пайплайна. Подавляет шум от huggingface_hub,
+    sentence_transformers, transformers и llama_cpp ctypes-коллбэков.
+    """
     logger.remove()
     logger.add(
         lambda msg: tqdm.tqdm.write(msg, end=""),
@@ -238,3 +254,49 @@ def configure_logger() -> None:
         format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
         catch=False
     )
+
+    warnings.filterwarnings("ignore", category=UserWarning, module="huggingface_hub")
+    warnings.filterwarnings("ignore", category=tqdm.TqdmWarning)
+
+    global _llama_noop_log_cb
+    _llama_noop_log_cb = llama_log_callback(lambda level, msg, ud: None)
+    llama_log_set(_llama_noop_log_cb, ctypes.c_void_p(0))
+
+    logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+    logging.getLogger("transformers").setLevel(logging.ERROR)
+    logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
+
+    _prev_unraisablehook = sys.unraisablehook
+
+    def _filtered_unraisablehook(unraisable: Any) -> None:
+        if "llama_log_callback" in repr(getattr(unraisable, "object", None) or ""):
+            return
+        _prev_unraisablehook(unraisable)
+
+    sys.unraisablehook = _filtered_unraisablehook
+
+
+@contextmanager
+def suppress_c_stderr() -> Generator[None, None, None]:
+    """Подавляет C-уровневый и Python-уровневый вывод в stderr.
+
+    Перенаправляет файловый дескриптор 2 (stderr) в os.devnull для C-кода
+    и временно подменяет sys.stderr для Python-уровневого вывода (например,
+    llama_context предупреждения от llama_cpp через ctypes callback).
+    Дескриптор гарантированно восстанавливается даже при исключении.
+
+    Yields:
+        None: Контекстный менеджер не возвращает значения.
+    """
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    old_fd = os.dup(2)
+    os.dup2(devnull_fd, 2)
+    os.close(devnull_fd)
+    try:
+        with redirect_stderr(io.StringIO()):
+            yield
+    finally:
+        os.dup2(old_fd, 2)
+        os.close(old_fd)
+        if _llama_noop_log_cb is not None:
+            llama_log_set(_llama_noop_log_cb, ctypes.c_void_p(0))

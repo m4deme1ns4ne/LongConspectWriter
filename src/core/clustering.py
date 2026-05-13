@@ -74,7 +74,7 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
             transcrib = json.load(file)
 
         sentences = TextsSplitter.split_text_to_sentences(transcrib["answer_agent"])
-        logger.info(f"Всего предложений: {len(sentences)}")
+        logger.debug(f"Всего предложений: {len(sentences)}")
 
         embeddings = self.model.encode(sentences)
         n_samples = len(embeddings)

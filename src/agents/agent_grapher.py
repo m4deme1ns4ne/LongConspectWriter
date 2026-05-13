@@ -231,7 +231,7 @@ class AgentGrapher(BaseLlamaCppAgent):
         graphs_mapping = {}
 
         if not graphs_data:
-            logger.info("Плейсхолдеров [GRAPH_TYPE: ...] не найдено. Пропуск.")
+            logger.debug("Плейсхолдеров [GRAPH_TYPE: ...] не найдено. Пропуск.")
             # Возвращаем пустой JSON
             return str(
                 self._safe_result_out_line(

@@ -349,15 +349,25 @@ class BaseLlamaCppAgent(BaseLLMAgent):
 
             if repo_id and filename:
                 logger.info(f"Загрузка модели с HuggingFace: {repo_id}/{filename}")
-                self.model = Llama.from_pretrained(
-                    repo_id=repo_id,
-                    filename=filename,
-                    local_dir=str(path_to_load_models),
-                    **init_kwargs,
-                )
+                try:
+                    with utils.suppress_c_stderr():
+                        self.model = Llama.from_pretrained(
+                            repo_id=repo_id,
+                            filename=filename,
+                            local_dir=str(path_to_load_models),
+                            **init_kwargs,
+                        )
+                except Exception as e:
+                    logger.error(f"Ошибка при загрузке модели {repo_id}/{filename}: {e}")
+                    raise
             else:
                 logger.info(f"Загрузка локальной модели по пути: {model_path}")
-                self.model = Llama(model_path=model_path, **init_kwargs)
+                try:
+                    with utils.suppress_c_stderr():
+                        self.model = Llama(model_path=model_path, **init_kwargs)
+                except Exception as e:
+                    logger.error(f"Ошибка при загрузке модели {model_path}: {e}")
+                    raise
 
             self._owns_model = True
             logger.info(f"Модель {self.model_display_name} загружена.")
@@ -382,7 +392,7 @@ class BaseLlamaCppAgent(BaseLLMAgent):
         )
 
         if self._owns_model:
-            logger.info(
+            logger.debug(
                 f"Инициализация {self.__class__.__name__} (Модель: {self.model_display_name})"
             )
             logger.info(
@@ -482,7 +492,8 @@ class BaseLlamaCppAgent(BaseLLMAgent):
 
         if stream:
             response_text = ""
-            generator = self.model.create_chat_completion(**kwargs)
+            with utils.suppress_c_stderr():
+                generator = self.model.create_chat_completion(**kwargs)
 
             for chunk in generator:
                 delta = chunk["choices"][0]["delta"]
@@ -493,7 +504,8 @@ class BaseLlamaCppAgent(BaseLLMAgent):
                         token_pbar.update(1)
             return response_text
         else:
-            response = self.model.create_chat_completion(**kwargs)
+            with utils.suppress_c_stderr():
+                response = self.model.create_chat_completion(**kwargs)
             return response["choices"][0]["message"]["content"]
 
 
@@ -551,7 +563,7 @@ class BaseSTTAgent(BaseAgent):
                 f"Промпта для темы {lecture_theme} нету. Будет использован стандартный промпт 'universal'"
             )
             self.initial_prompt = self.prompt[self._app_config.agent_name]["universal"]
-        logger.info(
+        logger.debug(
             f"Загружен промпт для агента {self.__class__.__name__}, по тематике: {lecture_theme}"
         )
 

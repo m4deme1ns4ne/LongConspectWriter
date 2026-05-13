@@ -62,7 +62,7 @@ class FasterWhisper(BaseSTTAgent):
             ]
             logger.debug(f"Топ-3 альтернативных языков: {top_3_langs}")
         else:
-            logger.info(
+            logger.debug(
                 f"Язык был задан явно, вероятности альтернатив недоступны: {self._gen_config.language}"
             )
 
