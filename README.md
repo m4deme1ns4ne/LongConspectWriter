@@ -164,10 +164,10 @@ Dataclass-описания конфигураций находятся в `src/c
 
 ## Evaluation
 
-Оценка качества конспектов проводилась методом LLM-as-a-judge по 7 парадигмам (P1–P7). Промпт судьи: [llm-as-a-judge](evaluation\comparison\prompt_llm-as-a-judge.md).
+Оценка качества конспектов проводилась методом LLM-as-a-judge по 7 парадигмам (P1–P7). Промпт судьи: [llm-as-a-judge](evaluation/comparison/prompt_llm-as-a-judge.md).
 Полная методология и датасет — в папке [evaluation/](evaluation/).
 
-**Baseline** — Gemini 3.1 Pro с [детальным системным промптом](evaluation\comparison\prompt_gemini.md). 
+**Baseline** — Gemini 3.1 Pro с [детальным системным промптом](evaluation/comparison/prompt_gemini.md). 
 В отличие от LCW, Gemini обрабатывает полный транскрипт целиком и работал через оффициальный сайт [Gemini](https://gemini.google.com) с подпиской Google AI Pro.
 
 **Датасет:** 10 лекций из 5 предметных областей: алгоритмы, машинное обучение, мат. анализ, биология, химия.
@@ -175,13 +175,13 @@ Dataclass-описания конфигураций находятся в `src/c
 ### Сводные оценки
 
 <p align="center">
-<img src="assets\Снимок экрана 2026-05-14 235216.png" width="95%" alt="summary scores">
+<img src="assets/Снимок экрана 2026-05-14 235216.png" width="95%" alt="summary scores">
 </p>
 
-## Детализация по парадигмам
+## Детализация по парадигмам. _Формат: LCW / Gemini_
 
 <p align="center">
-<img src="assets\Снимок экрана 2026-05-14 235127.png" width="95%" alt="paradigm scores by P1–P7">
+<img src="assets/Снимок экрана 2026-05-14 235127.png" width="95%" alt="paradigm scores by P1–P7">
 </p>
 
 **Вывод.** LCW достигает **78% качества SOTA модели** (6.87 / 10 против 8.84 / 10 у Gemini), работая полностью офлайн на потребительском GPU с 8B-моделями. 
