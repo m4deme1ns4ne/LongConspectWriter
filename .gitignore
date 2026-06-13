@@ -7,6 +7,7 @@ src/tests/test_data/
 evaluation/dataset
 evaluation/scripts/
 CLAUDE.md
+longwriter_habr.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
