@@ -1,107 +1,67 @@
-# LongConspectWriter: Преодоление ограничений контекстного окна при конспектировании аудиолекций с помощью локальных малых языковых моделей
+# LongConspectWriter
 
-LongConspectWriter — локальная мультиагентная система для автоматического создания академических конспектов из аудио STEM-лекции. Система работает полностью офлайн на потребительском GPU.
+<p align="center">
+  <b>English</b> •
+  <a href="README.ru.md">Русский</a>
+</p>
 
-## Оглавление
+<p align="center">
+  <a href=""><img src="https://img.shields.io/badge/Habr-Read_the_article-65A3BE?style=for-the-badge&logo=habr&logoColor=white" alt="Article on Habr"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-A6CE39?style=for-the-badge" alt="License: MIT"></a>
+</p>
 
-- [Архитектура системы](#архитектура-системы)
-- [Требования](#требования)
-- [Установка и запуск](#установка-и-запуск)
-- [CLI-действия](#cli-действия)
-- [Выходные артефакты](#выходные-артефакты)
-- [Конфигурация](#конфигурация)
+LongConspectWriter turns a lecture audio/video recording into a structured academic PDF conspect with formulas and graphs — fully locally, on 8 GB of VRAM. No single LLM call ever receives the full transcript. Sample outputs are in [`examples/`](examples/); the method and evaluation are described in the [article](docs/article.md).
+
+## Table of contents
+
+- [System architecture](#system-architecture)
+- [Installation and launch](#installation-and-launch)
+- [CLI actions](#cli-actions)
+- [Output artifacts](#output-artifacts)
+- [Configuration](#configuration)
 - [Evaluation](#evaluation)
 
-## Архитектура системы
+## System architecture
 
-LongConspectWriter принимает аудиозапись лекции и возвращает PDF-конспект, работая полностью офлайн. FasterWhisper транскрибирует запись, после чего текст разбивается на локальные хронологические кластеры. `AgentLocalPlanner` генерирует микротемы для каждого кластера, `AgentGlobalPlanner` сворачивает их в единый план глав, а `SemanticGlobalClusterizer` распределяет кластеры по соответствующим главам. На этих глобальных кластерах `AgentSynthesizerLlama` генерирует академический JSON-конспект по чанкам; встроенный `_AgentExtractor` после каждого чанка обновляет список извлечённых сущностей, не давая следующим чанкам их дублировать.
+<p align="center">
+<img src="assets/mermaid-diagram-2026-06-05T23-14-56.svg" width="50%" alt="LongConspectWriter pipeline architecture">
+</p>
 
-Готовый JSON конвертируется в Markdown. `AgentGraphPlanner` анализирует конспект и расставляет плейсхолдеры `[GRAPH_TYPE: ...]` там, где схема или график уместны. `AgentGrapher` обходит эти метки, генерирует и запускает Python-скрипты, делает ретраи при ошибках исполнения и сохраняет mapping готовых PNG. Затем плейсхолдеры заменяются HTML-блоками с локальными изображениями, а финальный Markdown конвертируется в PDF через Playwright + MathJax.
-
-```mermaid
-flowchart TD
-    %% Входные данные
-    Audio["Аудио / Видео"] --> STT["STT<br/>(Перевод аудио в текст)"]
-
-    %% Кластеризация и планирование
-    STT --> LCluster["Локальная кластеризация"]
-    LCluster --> LPlanner["AgentLocalPlanner<br/>(Генерация локальных тем на каждый кластер)"]
-    LPlanner --> GPlanner["AgentGlobalPlanner<br/>(Генерация глобальных тем на весь конспект)"]
-    LCluster --> GCluster["Глобальная кластеризация<br/>(Привязка локальных кластеров к глобальным темам)"]
-    GPlanner --> GCluster
-
-    %% Синтез текста
-    GCluster --> Synthesizer["AgentSynthesizerLlama<br/>(Генерация текста конспекта)"]
-    Synthesizer <--> Extractor["_AgentExtractor<br/>(Обновление контекста/памяти)"]
-    Synthesizer --> DraftJSON["Черновик конспекта (JSON)"]
-    DraftJSON --> ConvertMD["convert_json_to_md<br/>(JSON → Markdown)"]
-
-    %% Мультиагентный визуализатор
-    ConvertMD --> GraphPlanner["AgentGraphPlanner<br/>(Генерация плейсхолдеров для графиков)"]
-    GraphPlanner --> TaggedMD["Размеченный конспект с плейсхолдерами"]
-    TaggedMD --> Grapher["AgentGrapher<br/>(Генерация кода для графиков)"]
-    Grapher --> Images["Сгенерированные изображения<br/>(PNG)"]
-
-    %% Финальная сборка
-    TaggedMD --> FinalMD["Сборщик конспекта<br/>(Вставка HTML-тегов)"]
-    Images -.-> FinalMD
-    FinalMD["Конспект Markdown с графиками"]
-    FinalMD --> FinalPDF["Конспект PDF с графиками"]
-```
-
-### Основные агенты и компоненты
+### Core agents and components
 
 | Component | Responsibility |
 | --- | --- |
-| `FasterWhisper` | Транскрибирует аудио/видео в текст. |
-| `SemanticLocalClusterizer` | Делит транскрипт на локальные семантические кластеры. |
-| `AgentLocalPlanner` | Строит локальные темы по кластерам. |
-| `AgentGlobalPlanner` | Собирает локальные темы в глобальный план глав. |
-| `SemanticGlobalClusterizer` | Привязывает локальные кластеры к главам глобального плана. |
-| `AgentSynthesizerLlama` | Генерирует академический JSON-конспект и использует extractor для контекста. |
-| `_AgentExtractor` | Извлекает сущности из текущего чанка синтеза для дедупликации следующих чанков. |
-| `convert_json_to_md` | Конвертирует JSON-конспект синтезатора в Markdown для последующих этапов визуализации. |
-| `AgentGraphPlanner` | Анализирует готовый Markdown и вставляет `[GRAPH_TYPE: ...]`-плейсхолдеры по цитатам через нормализованный поиск. |
-| `AgentGrapher` | Генерирует Python-код визуализации, запускает его через `MPLBACKEND=Agg`, делает ретраи с повышением температуры и сохраняет mapping графиков. |
-| `add_graph_in_conspect` | Копирует успешные PNG в финальные `assets/` и заменяет плейсхолдеры HTML-блоками с изображениями. |
-| `convert_md_to_pdf` | Конвертирует финальный Markdown в PDF через Playwright: рендерит HTML с MathJax для формул и сохраняет постраничный A4-документ. |
+| `FasterWhisper` | Transcribes audio/video into text. |
+| `SemanticLocalClusterizer` | Splits the transcript into local semantic clusters. |
+| `AgentLocalPlanner` | Builds local topics from the clusters. |
+| `AgentGlobalPlanner` | Assembles local topics into a global chapter plan. |
+| `SemanticGlobalClusterizer` | Maps local clusters to the chapters of the global plan. |
+| `AgentSynthesizerLlama` | Generates an academic JSON conspect and uses the extractor for context. |
+| `_AgentExtractor` | Extracts entities from the current synthesis chunk to deduplicate the following chunks. |
+| `convert_json_to_md` | Converts the synthesizer's JSON conspect into Markdown for the subsequent visualization stages. |
+| `AgentGraphPlanner` | Analyzes the finished Markdown and inserts `[GRAPH_TYPE: ...]` placeholders next to quotes via normalized search. |
+| `AgentGrapher` | Generates Python visualization code, runs it via `MPLBACKEND=Agg`, retries with an increasing temperature, and saves the graph mapping. |
+| `add_graph_in_conspect` | Copies successful PNGs into the final `assets/` and replaces placeholders with HTML blocks containing the images. |
+| `convert_md_to_pdf` | Converts the final Markdown into PDF via Playwright: renders HTML with MathJax for formulas and saves a paginated A4 document. |
 
-### Технические детали реализации
+## Installation and launch
 
-**Преодоление ограничения контекстного окна.** Транскрипты STEM-лекций (1–3 часа) значительно превышают контекстное окно T-lite (8192 токенов). LongConspectWriter решает задачу двухуровневой стратегией:
-
-1. **Иерархическое планирование** — агенты всегда работают с кластерами или сводными темами, а не с полным транскриптом. Локальный планировщик видит один кластер, глобальный — список коротких описаний тем.
-
-2. **Чанковый синтез с перекрытием** — `AgentSynthesizer` обрабатывает каждую главу по чанкам. Параметры задаются в конфиге: `chunk_size_ratio: 0.7` (доля `n_ctx` на один чанк) и `chunk_overlap_ratio: 0.25` (перекрытие). Последние `last_tail_words_count: 50` слов предыдущего чанка передаются в следующий для сохранения связности.
-
-**Семантическая кластеризация.** Используются два разных эмбеддинга:
-- **Локальная**: `cointegrated/rubert-tiny2` + AgglomerativeClustering с параметрами `threshold=0.5`, `linkage=complete`, `metric=cosine` и `turn_on_connectivity=true` — ограничение связности сохраняет хронологический порядок кластеров.
-- **Глобальная**: `intfloat/multilingual-e5-small` для семантического сопоставления локальных кластеров с главами глобального плана.
-
-**Две специализированные LLM.** Все текстовые агенты (планировщик, синтезатор, экстрактор) используют `T-lite-it-2.1-Q5_K_M` — 8B-модель, оптимизированную для русского языка. Для генерации Python-кода визуализаций применяется `Qwen2.5-Coder-7B-Instruct-Q6_K` с тремя ретраями при ошибках исполнения: каждый следующий ретрай повышает `temperature` на `+0.1`.
-
-## Установка и запуск
-
-### Зависимости
+### Dependencies
 
 - Python `3.12+`
 - `uv`
 
-> Система тестировалась на GeForce RTX 3050 8gb
+> The system was tested on a GeForce RTX 3050 8gb
 
-### Запуск полного пайплайна
+### Running the full pipeline
 
 ```bash
 uv run python __main__.py --action all --path_to_file "data/example-audio/your_lecture.mp3"
 ```
 
-`all` запускает полный сценарий:
+`all` runs the full scenario.
 
-```text
-STT -> local clustering -> local planner -> global planner -> global clustering -> synthesizer -> JSON to Markdown -> graph planner -> grapher -> final Markdown with images -> PDF
-```
-
-### Запуск отдельных стадий
+### Running individual stages
 
 ```bash
 uv run python __main__.py --action stt --path_to_file "data/example-audio/your_lecture.mp3"
@@ -119,65 +79,65 @@ uv run python __main__.py --action add_graph_in_conspect --path_to_file "data/ru
 uv run python __main__.py --action convert_md_to_pdf --path_to_file "data/runs/YYYY.MM.DD/HH.MM.SS/10_conspect_with_graph_md/final_conspect.md"
 ```
 
-Необязательный флаг `--lecture_theme` задаёт тему лекции (`math`, `biology`, `chemistry` и т. д.) и влияет на выбор промпта в агентах, поддерживающих тематические шаблоны. Если флаг не передан, агенты используют `universal`-промпт.
+The optional `--lecture_theme` flag sets the lecture theme (`math`, `biology`, `chemistry`, etc.) and influences prompt selection in agents that support themed templates. If the flag is not passed, agents use the `universal` prompt.
 
-Каждый запуск CLI создаёт новую сессионную директорию внутри `data/runs/<date>/<time>/`. Если вы запускаете стадии вручную, передавайте пути к артефактам из нужной сессии явно.
+Each CLI run creates a new session directory under `data/runs/<date>/<time>/`. If you run stages manually, pass the paths to the artifacts from the relevant session explicitly.
 
-## CLI-действия
+## CLI actions
 
-Каждый компонент пайплайна можно запускать отдельно для тестирования и отладки.
+Each pipeline component can be run separately for testing and debugging.
 
 | Action | Input | Output |
 | --- | --- | --- |
-| `all` | Аудио/видео | Финальный PDF-конспект с формулами и графиками |
-| `stt` | Аудио/видео | `01_stt/out_filepath.json` с сырой транскрибацией |
-| `local_clustering` | Транскрипт STT | `02_local_clusters/out_filepath.json` |
-| `local_planner` | Локальные кластеры | `03_local_planners/out_filepath.json` |
-| `global_planner` | Локальные темы | `04_global_planners/out_filepath.json` |
-| `planner` | Локальные кластеры | Глобальный план через `local_planner -> global_planner` |
-| `global_clustering` | Глобальный план + локальные кластеры | `05_global_clusters/out_filepath.json` |
-| `clustering` | Транскрипт STT | Глобальные кластеры через `local_clustering -> planner -> global_clustering` |
-| `synthesizer` | Глобальные кластеры | `06_synthesizer/conspect.json` |
-| `convert_json_to_md` | JSON-конспект | `07_conspect_md/conspect.md` |
-| `graph_planner` | Markdown-конспект | `08_graph_planner/out_filepath.md` с добавленными `[GRAPH_TYPE: ...]` и `08_graph_planner/out_filepath.jsonl` |
-| `grapher` | Markdown с `[GRAPH_TYPE: ...]` | `09_grapher/graphs_mapping.json`, `09_grapher/scripts/*.py`, `09_grapher/assets/*.png` |
-| `add_graph_in_conspect` | Markdown с `[GRAPH_TYPE: ...]` + `graphs_mapping.json` | `10_conspect_with_graph_md/final_conspect.md` |
-| `convert_md_to_pdf` | Markdown-конспект | `11_conspect_pdf/final_conspect.pdf` |
+| `all` | Audio/video | Final PDF conspect with formulas and graphs |
+| `stt` | Audio/video | `01_stt/out_filepath.json` with the raw transcription |
+| `local_clustering` | STT transcript | `02_local_clusters/out_filepath.json` |
+| `local_planner` | Local clusters | `03_local_planners/out_filepath.json` |
+| `global_planner` | Local topics | `04_global_planners/out_filepath.json` |
+| `planner` | Local clusters | Global plan via `local_planner -> global_planner` |
+| `global_clustering` | Global plan + local clusters | `05_global_clusters/out_filepath.json` |
+| `clustering` | STT transcript | Global clusters via `local_clustering -> planner -> global_clustering` |
+| `synthesizer` | Global clusters | `06_synthesizer/conspect.json` |
+| `convert_json_to_md` | JSON conspect | `07_conspect_md/conspect.md` |
+| `graph_planner` | Markdown conspect | `08_graph_planner/out_filepath.md` with added `[GRAPH_TYPE: ...]` and `08_graph_planner/out_filepath.jsonl` |
+| `grapher` | Markdown with `[GRAPH_TYPE: ...]` | `09_grapher/graphs_mapping.json`, `09_grapher/scripts/*.py`, `09_grapher/assets/*.png` |
+| `add_graph_in_conspect` | Markdown with `[GRAPH_TYPE: ...]` + `graphs_mapping.json` | `10_conspect_with_graph_md/final_conspect.md` |
+| `convert_md_to_pdf` | Markdown conspect | `11_conspect_pdf/final_conspect.pdf` |
 
-## Выходные артефакты
+## Output artifacts
 
-Промежуточные артефакты создаются автоматически в папке текущей сессии:
+Intermediate artifacts are created automatically in the current session folder:
 
 ```text
 data/runs/YYYY.MM.DD/HH.MM.SS/
 ```
 
-Основные stage-директории:
+Main stage directories:
 
-- `01_stt/` — сырая транскрибация после FasterWhisper.
-- `02_local_clusters/` — локальные семантические кластеры.
-- `03_local_planners/` — локальные темы.
-- `04_global_planners/` — глобальный план глав.
-- `05_global_clusters/` — кластеры, привязанные к глобальным главам.
-- `05.1_extractor/` — JSONL-вывод внутреннего extractor во время синтеза.
-- `06_synthesizer/` — JSON-конспект.
-- `07_conspect_md/` — Markdown-конспект без финальной подстановки графиков.
-- `08_graph_planner/` — Markdown после вставки `[GRAPH_TYPE: ...]` и JSONL-ответы graph planner по чанкам.
-- `09_grapher/` — `graphs_mapping.json` и сгенерированные графики.
-- `09_grapher/assets/` — PNG-графики, созданные `AgentGrapher`.
-- `09_grapher/scripts/` — Python-скрипты, которыми рендерились графики.
-- `10_conspect_with_graph_md/` — финальный Markdown-конспект.
-- `10_conspect_with_graph_md/assets/` — локальные изображения, скопированные для финального Markdown.
-- `11_conspect_pdf/` — PDF-версия конспекта с отрендеренными формулами и графиками.
+- `01_stt/` — raw transcription after FasterWhisper.
+- `02_local_clusters/` — local semantic clusters.
+- `03_local_planners/` — local topics.
+- `04_global_planners/` — global chapter plan.
+- `05_global_clusters/` — clusters mapped to global chapters.
+- `05.1_extractor/` — JSONL output of the internal extractor during synthesis.
+- `06_synthesizer/` — JSON conspect.
+- `07_conspect_md/` — Markdown conspect without the final graph substitution.
+- `08_graph_planner/` — Markdown after inserting `[GRAPH_TYPE: ...]` and the graph planner's per-chunk JSONL responses.
+- `09_grapher/` — `graphs_mapping.json` and the generated graphs.
+- `09_grapher/assets/` — PNG graphs created by `AgentGrapher`.
+- `09_grapher/scripts/` — Python scripts used to render the graphs.
+- `10_conspect_with_graph_md/` — final Markdown conspect.
+- `10_conspect_with_graph_md/assets/` — local images copied for the final Markdown.
+- `11_conspect_pdf/` — PDF version of the conspect with rendered formulas and graphs.
 
-## Конфигурация
+## Configuration
 
-Все конфиги организованы в три группы:
+All configs are organized into three groups:
 
 ```
 src/configs/
-├── config_pipeline.yaml          — глобальные параметры пайплайна
-├── config-agents/                — по одному конфигу на каждый агент
+├── config_pipeline.yaml          — global pipeline parameters
+├── config-agents/                — one config per agent
 │   ├── stt/
 │   ├── local_planner/
 │   ├── global_planner/
@@ -185,96 +145,27 @@ src/configs/
 │   ├── extractor/
 │   ├── graph_planner/
 │   └── grapher/
-└── config-clusterizer/           — параметры кластеризации
+└── config-clusterizer/           — clustering parameters
     ├── config_local_clusterizer.yaml
     └── config_global_clusterizer.yaml
 ```
 
-Dataclass-описания всех полей конфигов — в `src/configs/configs.py`.
+Dataclass descriptions of all config fields are in `src/configs/configs.py`.
 
-### Переменные окружения
+### Environment variables
 
-Файл `.env` (шаблон — `.env.example`) содержит токен HuggingFace для загрузки моделей:
+The `.env` file (template — `.env.example`) contains the HuggingFace token for downloading models:
 
 ```
 HF_TOKEN=hf_...
 ```
 
-Модели автоматически загружаются в `.models/` при первом запуске.
+Models are downloaded automatically into `.models/` on the first run.
 
 ## Evaluation
 
-### Методология
+Quality was assessed with the LLM-as-a-judge method (judge — `Qwen3 Max Preview`) on 10 lectures from 5 domains, compared against the `Gemini 3.1 Pro` (single-call) baseline. Averaged across 7 paradigms, LCW scores **6.87/10 versus 8.84/10** for Gemini — ≈78% of the cloud reference quality, at zero inference cost and fully locally.
 
-Оценка качества конспектов проводилась методом **LLM-as-a-judge**: модель `Qwen3 Max Preview` получала транскрипт лекции и сгенерированный конспект в формате PDF (LCW или Gemini), после чего выставляла оценку по каждой из 7 парадигм (P1–P7). Промпт судьи: [evaluation/comparison/prompt_llm-as-a-judge.md](evaluation/comparison/prompt_llm-as-a-judge.md). Полный датасет и результаты — в папке [evaluation/](evaluation/).
+![Summary quality scores of LCW and Gemini 3.1 Pro conspects](assets/eval_comparison.png)
 
-**Baseline** — конспекты, сгенерированные Gemini 3.1 Pro с [детальным системным промптом](evaluation/comparison/prompt_gemini.md) через официальный сайт с подпиской Google AI Pro. В отличие от LCW, Gemini обрабатывает полный транскрипт целиком без разбивки на чанки.
-
-**Датасет:** 10 лекций по 5 предметным областям: алгоритмы, машинное обучение, мат. анализ, биология, химия. Описание датасета: [evaluation/dataset.md](evaluation/dataset.md).
-
-### Парадигмы оценки (P1–P7)
-
-| Парадигма | Название | Что оценивается | Балл |
-|:---------:|----------|-----------------|:----:|
-| **P1** | Модульная семантическая архитектура | Разбивка на тематические блоки, иерархия разделов, навигация | 1–10 |
-| **P2** | Обезличивание | Отсутствие мета-нарратива — отсылок к лектору, аудитории, процессу лекции | 1–10 |
-| **P3** | Математический формализм | Корректность LaTeX-нотации, строгость предметной терминологии | 1–10 |
-| **P4** | Визуализация | Наличие Mermaid-диаграмм, ASCII-схем, таблиц, графиков там, где визуализация уместна | 0–10 / null |
-| **P5** | Фактическая точность | Критические ошибки (неверные формулы), значимые ошибки, незначительные | 1–10 |
-| **P6** | Полнота охвата | Ключевые темы транскрипта, представленные с достаточной глубиной | 1–10 |
-| **P7** | Самодостаточность | Читаемость без прослушивания лекции, контекст и объяснения «зачем» | 1–10 |
-
-### Сводные оценки
-
-<p align="center">
-<img src="assets/Снимок экрана 2026-05-14 235216.png" width="95%" alt="summary scores">
-</p>
-<!-- Если не открывается фотография, это таже самая таблица, но в формате .md -->
-<!-- | #  | Тема | Домен | LCW | Gemini 3.1 Pro | LCW % |
-|---:|------|-------|:---:|:--------------:|:-----:|
-| 1  | Введение. Базовые конструкции Python | Алгоритмы | 8.14 | 8.57 | 95% |
-| 2  | Алгебра логики. Ветвления | Алгоритмы | 6.00 | 7.86 | 76% |
-|    | **Алгоритмы** | | **7.07** | **8.22** | **86%** |
-| 3  | Введение. Основные понятия и обозначения | Машинное обучение | 5.43 | 8.43 | 64% |
-| 4  | Метрические методы классификации | Машинное обучение | 6.57 | 8.29 | 79% |
-|    | **Машинное обучение** | | **6.00** | **8.36** | **72%** |
-| 5  | Основные определения математического анализа | Мат. анализ | 7.71 | 8.86 | 87% |
-| 6  | Функция и её график. Мн-ва целых и рациональных чисел | Мат. анализ | 6.71 | 8.71 | 77% |
-|    | **Мат. анализ** | | **7.21** | **8.79** | **82%** |
-| 7  | Определение жизни. Микро- и макроэлементы | Биология | 7.86 | 10.00 | 79% |
-| 8  | Биологические мембраны. Вторичные метаболиты | Биология | 7.00 | 9.57 | 73% |
-|    | **Биология** | | **7.43** | **9.79** | **76%** |
-| 9  | Основные понятия химии | Химия | 8.00 | 9.71 | 82% |
-| 10 | Атом водорода и многоэлектронные атомы | Химия | 5.29 | 8.43 | 63% |
-|    | **Химия** | | **6.65** | **9.07** | **73%** |
-|    | **Среднее** | | **6.87** | **8.84** | **78%** | -->
-
-### Детализация по парадигмам. _Формат: LCW / Gemini_
-
-<p align="center">
-<img src="assets/Снимок экрана 2026-05-14 235127.png" width="95%" alt="paradigm scores by P1–P7">
-</p>
-
-<!-- Если не открывается фотография, это таже самая таблица, но в формате .md -->
-<!-- | #  | Тема | P1 | P2 | P3 | P4 | P5 | P6 | P7 | Avg |
-|---:|------|:--:|:--:|:--:|:--:|:--:|:--:|:--:|----:|
-| 1  | Введение. Базовые конструкции Python | 9/9 | 10/10 | 8/9 | 3/4 | 9/10 | 9/9 | 9/9 | 8.14/8.57 |
-| 2  | Алгебра логики. Ветвления | 8/9 | 8/10 | 3/8 | 3/3 | 4/10 | 8/8 | 8/7 | 6.00/7.86 |
-| 3  | Введение. Основные понятия и обозначения | 6/10 | 9/10 | 5/9 | 2/2 | 4/10 | 7/9 | 5/9 | 5.43/8.43 |
-| 4  | Метрические методы классификации | 7/9 | 5/10 | 5/8 | 3/3 | 9/10 | 9/9 | 8/9 | 6.57/8.29 |
-| 5  | Основные определения математического анализа | 9/10 | 10/10 | 9/9 | 3/4 | 5/10 | 9/10 | 9/9 | 7.71/8.86 |
-| 6  | Функция и её график. Мн-ва целых и рациональных чисел | 7/9 | 9/10 | 4/8 | 1/6 | 9/10 | 9/9 | 8/9 | 6.71/8.71 |
-| 7  | Определение жизни. Микро- и макроэлементы | 8/10 | 10/10 | 6/10 | 3/10 | 10/10 | 9/10 | 9/10 | 7.86/10.00 |
-| 8  | Биологические мембраны. Вторичные метаболиты | 6/10 | 10/9 | 6/10 | 1/8 | 8/10 | 9/10 | 9/10 | 7.00/9.57 |
-| 9  | Основные понятия химии | 9/10 | 9/10 | 7/9 | 3/9 | 9/10 | 10/10 | 9/10 | 8.00/9.71 |
-| 10 | Атом водорода и многоэлектронные атомы | 5/10 | 6/10 | 4/6 | 1/5 | 5/10 | 9/9 | 7/9 | 5.29/8.43 |
-|    | **Среднее** | **7.4/9.6** | **8.6/9.9** | **5.7/8.6** | **2.3/5.4** | **7.2/10.0** | **8.8/9.3** | **8.1/9.1** | **6.87/8.84** | -->
-
-
-**Вывод.** LCW достигает **78% качества SOTA модели** (6.87 / 10 против 8.84 / 10 у Gemini), работая полностью офлайн на потребительском GPU с 8B-моделями. 
-
-**Сильные стороны.** Покрытие материала (P6: 8.8 / 9.3) и педагогическая глубина (P7: 8.1 / 9.1) — показатели, наиболее близкие к Gemini. Это говорит о том, что связка локальных планировщиков и глобального плана эффективно решает задачу «не упустить тему» даже без сквозного контекста. Обезличивание (P2: 8.6 / 9.9) также на высоком уровне — агент-синтезатор стабильно избегает мета-нарратива и не ссылается на лектора или процесс лекции.
-
-**Ограничения.** Фактическая точность (P5: 7.2 / 10.0) — показатель, наиболее чувствительный к размеру модели: 8B-модель чаще галлюцинирует детали и иногда переформулирует термины. LaTeX-формализм (P3: 5.7 / 8.6) страдает по той же причине: корректная разметка формул требует точного воспроизведения синтаксиса, с чем малые модели справляются хуже. P4 (визуализация) низок у обеих систем (LCW: 2.3, Gemini: 5.4) — автоматический выбор уместного типа графика и его корректная генерация объективно сложны вне зависимости от размера модели.
-
-**По доменам** лучший результат показывают Алгоритмы (86%): контент хорошо структурирован в транскрипте и не требует сложной математической нотации. Наибольший разрыв — в Машинном обучении (72%) и Химии (73%): лекции плотно насыщены формульной нотацией и специализированной терминологией, где дефицит параметров ощущается острее всего.
+The methodology, paradigm-by-paradigm breakdown, and interpretation are in the [article](docs/article.md). The judge prompt, baseline prompt, dataset description, and full results are in the [evaluation/](evaluation/) folder ([judge prompt](evaluation/comparison/prompt_llm-as-a-judge.md), [dataset](evaluation/dataset.md)).
