@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" role="img" aria-label="LongConspectWriter">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0c1730"/>
+      <stop offset="0.55" stop-color="#13294b"/>
+      <stop offset="1" stop-color="#0a1f44"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5b9bff"/>
+      <stop offset="1" stop-color="#8fc0ff"/>
+    </linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#9fc0ff" stroke-width="1" stroke-opacity="0.06"/>
+    </pattern>
+    <style>
+      .ink   { fill:none; stroke:#7ea6e6; stroke-opacity:0.55; stroke-width:1.6; }
+      .ink2  { fill:none; stroke:#9fc0ff; stroke-opacity:0.30; stroke-width:1.3; }
+      .dash  { stroke-dasharray:5 4; }
+      .node  { fill:#13294b; stroke:#7ea6e6; stroke-opacity:0.75; stroke-width:1.6; }
+      .glyph { fill:#9fc0ff; fill-opacity:0.32; font-family:'Cambria Math','Segoe UI Symbol',serif; }
+      .title { font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif; font-weight:700; }
+    </style>
+  </defs>
+
+  <!-- фон -->
+  <rect width="1280" height="400" fill="url(#bg)"/>
+  <rect width="1280" height="400" fill="url(#grid)"/>
+  <rect x="14" y="14" width="1252" height="372" rx="10" fill="none" stroke="#5b9bff" stroke-opacity="0.18" stroke-width="1.5"/>
+
+  <!-- ===== ЛЕВЫЙ БЛОК: тетрадь конспекта + формулы (у самого края) ===== -->
+  <g transform="translate(30 86) rotate(-7)">
+    <rect class="ink" x="0" y="0" width="150" height="200" rx="4"/>
+    <!-- поля -->
+    <line class="ink2" x1="26" y1="0" x2="26" y2="200" stroke-opacity="0.45" stroke="#ff8fa0"/>
+    <!-- строки конспекта -->
+    <line class="ink2" x1="36" y1="34"  x2="134" y2="34"/>
+    <line class="ink2" x1="36" y1="58"  x2="134" y2="58"/>
+    <line class="ink2" x1="36" y1="82"  x2="118" y2="82"/>
+    <line class="ink2" x1="36" y1="106" x2="134" y2="106"/>
+    <line class="ink2" x1="36" y1="130" x2="100" y2="130"/>
+    <line class="ink2" x1="36" y1="154" x2="134" y2="154"/>
+    <line class="ink2" x1="36" y1="178" x2="86"  y2="178"/>
+    <!-- кольца пружины -->
+    <circle class="ink2" cx="8" cy="24"  r="5"/>
+    <circle class="ink2" cx="8" cy="64"  r="5"/>
+    <circle class="ink2" cx="8" cy="104" r="5"/>
+    <circle class="ink2" cx="8" cy="144" r="5"/>
+    <circle class="ink2" cx="8" cy="184" r="5"/>
+  </g>
+
+  <!-- циркуль / геометрия -->
+  <g transform="translate(130 290)">
+    <circle class="ink" cx="0" cy="0" r="46"/>
+    <circle class="ink2 dash" cx="0" cy="0" r="30"/>
+    <line class="ink" x1="-56" y1="0" x2="56" y2="0"/>
+    <line class="ink" x1="0" y1="-56" x2="0" y2="56"/>
+    <path class="ink" d="M-46 0 A46 46 0 0 1 0 -46"/>
+  </g>
+
+  <!-- формулы (намёк на учебный материал, по углам) -->
+  <text class="glyph" x="24"  y="320" font-size="44">&#8747;</text>
+  <text class="glyph" x="40"  y="120" font-size="40">&#931;</text>
+  <text class="glyph" x="170" y="360" font-size="30">&#8706;f/&#8706;x</text>
+
+  <!-- ===== ПРАВЫЙ БЛОК: граф кластеров + матрица связности ===== -->
+  <g transform="translate(1015 60)">
+    <!-- рёбра -->
+    <line class="ink2" x1="40" y1="40"  x2="150" y2="30"/>
+    <line class="ink2" x1="40" y1="40"  x2="70"  y2="150"/>
+    <line class="ink2" x1="150" y1="30" x2="200" y2="130"/>
+    <line class="ink2 dash" x1="70" y1="150" x2="200" y2="130"/>
+    <line class="ink2" x1="150" y1="30" x2="240" y2="60"/>
+    <line class="ink2 dash" x1="200" y1="130" x2="120" y2="220"/>
+    <line class="ink2" x1="70" y1="150" x2="120" y2="220"/>
+    <!-- узлы (предложения / кластеры) -->
+    <circle class="node" cx="40"  cy="40"  r="13"/>
+    <circle class="node" cx="150" cy="30"  r="16"/>
+    <circle class="node" cx="240" cy="60"  r="11"/>
+    <circle class="node" cx="70"  cy="150" r="15"/>
+    <circle class="node" cx="200" cy="130" r="13"/>
+    <circle class="node" cx="120" cy="220" r="12"/>
+  </g>
+
+  <!-- матрица связности -->
+  <g transform="translate(1180 250)">
+    <rect class="ink2" x="0"  y="0"  width="22" height="22"/>
+    <rect class="ink2" x="24" y="0"  width="22" height="22"/>
+    <rect class="ink2" x="48" y="0"  width="22" height="22"/>
+    <rect class="ink2" x="0"  y="24" width="22" height="22"/>
+    <rect class="ink2" x="24" y="24" width="22" height="22"/>
+    <rect class="ink2" x="48" y="24" width="22" height="22"/>
+    <rect class="ink2" x="0"  y="48" width="22" height="22"/>
+    <rect class="ink2" x="24" y="48" width="22" height="22"/>
+    <rect class="ink2" x="48" y="48" width="22" height="22"/>
+    <rect fill="#5b9bff" fill-opacity="0.30" x="0"  y="0"  width="22" height="22"/>
+    <rect fill="#5b9bff" fill-opacity="0.30" x="24" y="24" width="22" height="22"/>
+    <rect fill="#5b9bff" fill-opacity="0.30" x="48" y="48" width="22" height="22"/>
+    <rect fill="#5b9bff" fill-opacity="0.18" x="24" y="0"  width="22" height="22"/>
+    <rect fill="#5b9bff" fill-opacity="0.18" x="0"  y="24" width="22" height="22"/>
+  </g>
+
+  <!-- ===== ЗАГОЛОВОК ===== -->
+  <text class="title" x="640" y="228" text-anchor="middle" font-size="84" letter-spacing="-1">
+    <tspan fill="#ffffff">Long</tspan><tspan fill="url(#accent)">Conspect</tspan><tspan fill="#ffffff">Writer</tspan>
+  </text>
+</svg>

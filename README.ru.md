@@ -1,4 +1,8 @@
-# LongConspectWriter
+<p align="center">
+  <img src="assets/banner.svg" alt="LongConspectWriter" width="100%">
+</p>
+
+# **LongConspectWriter: преодоление ограничений контекстного окна при конспектировании аудиолекций с помощью локальных SLM**
 
 <p align="center">
   <a href="README.md">English</a> •

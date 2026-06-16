@@ -1,4 +1,8 @@
-# LongConspectWriter
+<p align="center">
+  <img src="assets/banner.svg" alt="LongConspectWriter" width="100%">
+</p>
+
+# **LongConspectWriter: Overcoming Context Window Constraints in Audio Lecture Summarization with Local SLMs**
 
 <p align="center">
   <b>English</b> •
