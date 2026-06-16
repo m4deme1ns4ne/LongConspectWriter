@@ -189,6 +189,7 @@ class LocalClusterizerGenConfig:
     turn_on_connectivity: bool
     metric: str
     n_clusters: bool | int
+    min_sentences: int = 5
 
 
 @dataclass

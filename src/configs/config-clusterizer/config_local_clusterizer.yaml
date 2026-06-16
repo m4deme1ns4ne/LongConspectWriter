@@ -10,3 +10,4 @@ gen_config:
   turn_on_connectivity: true
   metric: "cosine"
   n_clusters: null
+  min_sentences: 5

@@ -94,7 +94,7 @@ class SemanticLocalClusterizer(BaseLocalClusterizer):
 
         raw_labels = local_clusterer.fit_predict(embeddings)
 
-        min_s = 5
+        min_s = self._gen_config.min_sentences
         clusters, final_labels = self._format_cluster_output(
             sentences, raw_labels, min_sentences=min_s
         )
