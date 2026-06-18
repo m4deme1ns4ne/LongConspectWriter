@@ -1,0 +1,18 @@
+flowchart TD
+    Audio["Audio / Video"] --> STT["STT<br/>(Speech to text)"]
+    STT --> LCluster["Local clustering"]
+    LCluster --> LPlanner["AgentLocalPlanner<br/>(Local topics per cluster)"]
+    LPlanner --> GPlanner["AgentGlobalPlanner<br/>(Global topics for the whole conspect)"]
+    LCluster --> GCluster["Global clustering<br/>(Mapping local clusters to global topics)"]
+    GPlanner --> GCluster
+    GCluster --> Synthesizer["AgentSynthesizerLlama<br/>(Conspect text generation)"]
+    Synthesizer <--> Extractor["_AgentExtractor<br/>(Context/memory update)"]
+    Synthesizer --> DraftJSON["Conspect draft (JSON)"]
+    DraftJSON --> ConvertMD["convert_json_to_md<br/>(JSON &rarr; Markdown)"]
+    ConvertMD --> GraphPlanner["AgentGraphPlanner<br/>(Graph placeholder generation)"]
+    GraphPlanner --> TaggedMD["Conspect with graph placeholders"]
+    TaggedMD --> Grapher["AgentGrapher<br/>(Graph code generation)"]
+    Grapher --> Images["Generated images<br/>(PNG)"]
+    TaggedMD --> FinalMD["Markdown conspect with graphs"]
+    Images --> FinalMD
+    FinalMD --> FinalPDF["PDF conspect with graphs"]
