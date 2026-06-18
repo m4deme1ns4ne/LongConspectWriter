@@ -2,7 +2,7 @@
   <img src="assets/banner.svg" alt="LongConspectWriter" width="100%">
 </p>
 
-# **LongConspectWriter: преодоление ограничений контекстного окна при конспектировании аудиолекций с помощью локальных SLM**
+# **LongConspectWriter: автоматическая генерация структурированных конспектов лекций на потребительском GPU**
 
 <p align="center">
   <a href="README.md">English</a> •

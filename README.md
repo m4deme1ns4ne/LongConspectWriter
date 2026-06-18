@@ -2,7 +2,7 @@
   <img src="assets/banner.svg" alt="LongConspectWriter" width="100%">
 </p>
 
-# **LongConspectWriter: Overcoming Context Window Constraints in Audio Lecture Summarization with Local SLMs**
+# **LongConspectWriter: Automatic Generation of Structured Lecture Conspects on Consumer GPUs**
 
 <p align="center">
   <b>English</b> •
@@ -170,6 +170,6 @@ Models are downloaded automatically into `.models/` on the first run.
 
 Quality was assessed with the LLM-as-a-judge method (judge — `Qwen3 Max Preview`) on 10 lectures from 5 domains, compared against the `Gemini 3.1 Pro` (single-call) baseline. Averaged across 7 paradigms, LCW scores **6.87/10 versus 8.84/10** for Gemini — ≈78% of the cloud reference quality, at zero inference cost and fully locally.
 
-![Summary quality scores of LCW and Gemini 3.1 Pro conspects](assets/eval_comparison.png)
+![Summary quality scores of LCW and Gemini 3.1 Pro conspects](assets/eval_comparison.en.png)
 
 The methodology, paradigm-by-paradigm breakdown, and interpretation are in the [article](docs/article.md). The judge prompt, baseline prompt, dataset description, and full results are in the [evaluation/](evaluation/) folder ([judge prompt](evaluation/comparison/prompt_llm-as-a-judge.md), [dataset](evaluation/dataset.md)).
