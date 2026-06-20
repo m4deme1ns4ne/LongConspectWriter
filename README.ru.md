@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href=""><img src="https://img.shields.io/badge/Хабр-Читать_статью-65A3BE?style=for-the-badge&logo=habr&logoColor=white" alt="Статья на Хабре"></a>
+  <a href="https://habr.com/ru/articles/1049640/"><img src="https://img.shields.io/badge/Хабр-Читать_статью-65A3BE?style=for-the-badge&logo=habr&logoColor=white" alt="Статья на Хабре"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-A6CE39?style=for-the-badge" alt="License: MIT"></a>
 </p>
 
