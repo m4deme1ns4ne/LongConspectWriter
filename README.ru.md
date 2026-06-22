@@ -11,6 +11,8 @@
 
 <p align="center">
   <a href="https://habr.com/ru/articles/1049640/"><img src="https://img.shields.io/badge/Хабр-Читать_статью-65A3BE?style=for-the-badge&logo=habr&logoColor=white" alt="Статья на Хабре"></a>
+  <a href="docs/LongConspectWriter_ru.pdf"><img src="https://img.shields.io/badge/PDF-Статья_(RU)-B31B1B?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" alt="PDF-статья (RU)"></a>
+  <a href="docs/LongConspectWriter_en.pdf"><img src="https://img.shields.io/badge/PDF-Paper_(EN)-B31B1B?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" alt="PDF paper (EN)"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-A6CE39?style=for-the-badge" alt="License: MIT"></a>
 </p>
 

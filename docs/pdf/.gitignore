@@ -1,0 +1,13 @@
+# Промежуточные файлы pandoc/tectonic (генерируются build.ps1)
+article_ru.tex
+article_en.tex
+article_ru.pdf
+article_en.pdf
+*.aux
+*.log
+*.toc
+*.out
+# Каталог предпросмотра страниц
+chk/
+# Шрифты CMU (OFL) докачиваются build.ps1 — не храним в репозитории
+fonts/
