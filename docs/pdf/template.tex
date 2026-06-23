@@ -35,6 +35,7 @@
 
 %==================== Таблицы, графика, цвет ================================
 \usepackage{calc}
+\usepackage{changepage}
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{array}
@@ -101,17 +102,18 @@ $endif$
 \vspace{0.8em}
 
 $if(abstract)$
-\begin{center}
-\begin{minipage}{0.86\textwidth}
-\rule{\textwidth}{0.4pt}\par
+% Аннотация в узкой колонке с линейками сверху и снизу (arXiv-облик).
+% adjustwidth (в отличие от minipage) разрывается между страницами, поэтому
+% длинная аннотация начинается сразу под титулом, а не выталкивается целиком далее.
+\begin{adjustwidth}{0.07\textwidth}{0.07\textwidth}
+\noindent\rule{\linewidth}{0.4pt}\par
 \vspace{0.3em}
 {\centering\textbf{$abstractlabel$}\par}
 \vspace{0.4em}
-\small $abstract$
-\par\vspace{0.3em}
-\rule{\textwidth}{0.4pt}
-\end{minipage}
-\end{center}
+{\small\noindent $abstract$\par}
+\vspace{0.3em}
+\noindent\rule{\linewidth}{0.4pt}
+\end{adjustwidth}
 \vspace{1.0em}
 $endif$
 
